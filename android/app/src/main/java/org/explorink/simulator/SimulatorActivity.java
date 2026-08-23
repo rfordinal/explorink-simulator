@@ -9,6 +9,7 @@ import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MenuItem;
@@ -123,7 +124,7 @@ public class SimulatorActivity extends SDLActivity
             };
             for (String permission : needed) {
                 if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-                    onBridgeStatus("waiting for Bluetooth permission");
+                    Log.i("ExplorInkSimulator", "waiting for Bluetooth permission");
                     requestPermissions(needed, REQ_BLUETOOTH);
                     return;
                 }
@@ -131,7 +132,7 @@ public class SimulatorActivity extends SDLActivity
         }
         bridge = new BleBridge(this, port, this);
         bridge.start();
-        onBridgeStatus("bridge starting on port " + port);
+        Log.i("ExplorInkSimulator", "bridge starting on port " + port);
     }
 
     @Override
@@ -143,7 +144,7 @@ public class SimulatorActivity extends SDLActivity
         }
         for (int result : results) {
             if (result != PackageManager.PERMISSION_GRANTED) {
-                onBridgeStatus("Bluetooth permission refused, no bridge");
+                Log.i("ExplorInkSimulator", "Bluetooth permission refused, no bridge");
                 return;
             }
         }
@@ -151,24 +152,36 @@ public class SimulatorActivity extends SDLActivity
     }
 
     /**
-     * Compressed to a token: a filled dot means a central is on the link, a
-     * hollow one means advertising and waiting. Anything else shows as a dash.
-     * The sentence itself is in logcat.
+     * Messages are for logcat, not for the indicator. Matching on them was the
+     * bug: the firmware asks for new connection parameters a few seconds after
+     * every connect, and that message is not a state, so the token fell back to
+     * unknown while a central was plainly connected.
      */
     @Override
     public void onBridgeStatus(String text) {
+        Log.i("ExplorInkSimulator", text);
+    }
+
+    /**
+     * A filled dot means a central is on the link, a hollow one advertising and
+     * waiting, a dash attached to the simulator with no radio up yet.
+     */
+    @Override
+    public void onBridgeState(BleBridge.State state) {
         if (bridgeLine == null) {
             return;
         }
         String token;
-        if (text.startsWith("a central connected")) {
-            token = "BLE \u25CF";
-        } else if (text.startsWith("advertising")) {
-            token = "BLE \u25CB";
-        } else if (text.startsWith("the central left")) {
-            token = "BLE \u25CB";
-        } else {
-            token = "BLE \u2014";
+        switch (state) {
+            case CONNECTED:   token = "BLE \u25CF"; break;
+            case ADVERTISING: token = "BLE \u25CB"; break;
+            case ATTACHED:    token = "BLE \u2014"; break;
+            case OFF:
+            default:          token = null; break;
+        }
+        if (token == null) {
+            bridgeLine.setVisibility(View.GONE);
+            return;
         }
         bridgeLine.setVisibility(View.VISIBLE);
         bridgeLine.setText(token);
