@@ -450,12 +450,16 @@ final class BleBridge {
                 // The negotiated MTU is not knowable yet, so open with the
                 // contract's default and correct it when onMtuChanged fires.
                 send(obj("op", "connect", "mtu", 23));
-                status("a central connected");
+                // The address, because "a central connected" does not say
+                // which one, and with several phones on a bench that is
+                // exactly the question. Compare against `settings get secure
+                // bluetooth_address` on the phone you think it is.
+                status("a central connected: " + safeAddress(device));
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                status("the central left: " + safeAddress(device));
                 peer = null;
                 cccd.clear();
                 send(obj("op", "disconnect", "reason", 0x13));
-                status("the central left");
             }
         }
 
@@ -578,6 +582,18 @@ final class BleBridge {
             out[i] = (byte) Integer.parseInt(s.substring(i * 2, i * 2 + 2), 16);
         }
         return out;
+    }
+
+    @SuppressLint("MissingPermission")
+    private static String safeAddress(BluetoothDevice device) {
+        if (device == null) {
+            return "unknown";
+        }
+        try {
+            return device.getAddress();
+        } catch (SecurityException e) {
+            return "unknown";
+        }
     }
 
     private static String shortUuid(UUID uuid) {

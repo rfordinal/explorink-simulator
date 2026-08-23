@@ -433,6 +433,16 @@ void HalDisplay::presentIfNeeded() {
     SDL_UpdateTexture(texture, nullptr, pixelBuf,
                       DISPLAY_WIDTH * sizeof(uint32_t));
   }
+  // The clear colour was never set anywhere in this file, so this cleared with
+  // whatever the renderer's draw colour happened to be. Black is what an e-ink
+  // frame's surround should be, and an unset colour is a bug waiting for a
+  // platform to pick something else.
+  //
+  // It also removed a coloured fringe around the panel on Android: the border
+  // pixels went from (136,169,52) to (0,0,0). Linear filtering blends the
+  // scaled texture's edge against the surround, so an undefined surround shows
+  // up as a five-pixel gradient there. See ANDROID.md.
+  SDL_SetRenderDrawColor(sdl_renderer, 0, 0, 0, 255);
   SDL_RenderClear(sdl_renderer);
 
   // For portrait modes the landscape panel texture must be rotated to fill the

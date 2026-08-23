@@ -144,6 +144,19 @@ indistinguishable from a keyboard press on the desktop simulator, and neither
 `HalGPIO` nor anything else in the HAL changed. `adb shell input keyevent`
 still works and goes through the same path.
 
+The buttons follow the device rather than the phone: the front row underneath
+the panel (Back, Select, Left, Right) and the page keys on the right edge, Up
+above Down, their text turned to read along that edge with the baseline against
+it. Power, sleep and the X4 Pro home key are in the top bar's menu -- real
+buttons, rarely pressed, and not worth the screen.
+
+**The panel is never covered and never runs off.** A fixed-size panel is shifted
+left so the page keys sit in the strip beside it, not on top of it. If a size is
+wider than the room available the keys overlap instead, because the alternative
+is the panel disappearing off the left edge, and the bar says `keys overlap, no
+room`. A panel the layout had to clip says `clipped to WxH` rather than claiming
+a size it does not have.
+
 **Three panel sizes**, from the bar's menu or `tools/android/set_mode.sh`:
 
 | mode | what it is |
@@ -402,6 +415,34 @@ tools/android/set_env.sh --clear --serial <phone>
 `CROSSPOINT_SIM_INPUT_SCRIPT`, `CROSSPOINT_SIM_SCREENSHOTS` and
 `CROSSPOINT_SIM_HTTP_PORT` go in the same way, so the scripted-run harness is
 reachable on a phone too. Untested for those three.
+
+## A coloured fringe around the panel, and the wrong theory about it
+
+In a fixed-size mode (1:1 or real size) the panel has a one-to-two pixel
+olive-green edge. Measured, not eyeballed: at the left border the pixels run
+`(14,14,14)` surround, then `(136,169,52)`, `(185,215,107)`, `(204,225,148)`,
+`(232,242,207)`, then white. A five-pixel gradient, so it is a blend, not a line
+anything drew.
+
+**It was the renderer's clear colour, and it is fixed.** `SDL_RenderClear` was
+called in `HalDisplay.cpp` without `SDL_SetRenderDrawColor` appearing anywhere in
+that file, so the surround was cleared with whatever draw colour happened to be
+current. Setting it to black changed the border pixels from `(136,169,52)` to
+`(0,0,0)`, measured, in five consecutive captures.
+
+Two honest caveats, because this was got wrong twice on the way:
+
+- One capture showed the fringe from an APK that already carried the fixed
+  library. Whether that process had actually loaded it was not established, so
+  the possibility that the fringe is also intermittent is not ruled out.
+- It is not a developer option; `show_surface_updates`, `debug.layout` and
+  `debug.hwui.*` are all unset on the phone. That was checked before guessing.
+
+The five-pixel gradient is what a scaled edge looks like with
+`SDL_HINT_RENDER_SCALE_QUALITY=1` blending the texture edge against the
+surround, which is why the surround's colour is what showed. That hint is
+deliberate: nearest filtering turns Bayer dithering into hard stripes (the
+fork's `CLAUDE.md`).
 
 ## Open
 

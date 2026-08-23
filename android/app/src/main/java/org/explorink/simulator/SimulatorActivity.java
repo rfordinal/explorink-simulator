@@ -68,7 +68,11 @@ public class SimulatorActivity extends SDLActivity
     private FrameLayout panelHolder;
     private TextView subtitle;
     private TextView bridgeLine;
+    private View sideKeys;
     private BleBridge bridge;
+    /** What applyMode asked for, so a clipped panel can be reported. */
+    private int wantedWidth;
+    private int wantedHeight;
 
     @Override
     protected String[] getLibraries() {
@@ -146,13 +150,28 @@ public class SimulatorActivity extends SDLActivity
         startBridgeIfConfigured();
     }
 
+    /**
+     * Compressed to a token: a filled dot means a central is on the link, a
+     * hollow one means advertising and waiting. Anything else shows as a dash.
+     * The sentence itself is in logcat.
+     */
     @Override
     public void onBridgeStatus(String text) {
         if (bridgeLine == null) {
             return;
         }
+        String token;
+        if (text.startsWith("a central connected")) {
+            token = "BLE \u25CF";
+        } else if (text.startsWith("advertising")) {
+            token = "BLE \u25CB";
+        } else if (text.startsWith("the central left")) {
+            token = "BLE \u25CB";
+        } else {
+            token = "BLE \u2014";
+        }
         bridgeLine.setVisibility(View.VISIBLE);
-        bridgeLine.setText("BLE: " + text);
+        bridgeLine.setText(token);
     }
 
     // ---------------------------------------------------------------- chrome
@@ -178,24 +197,28 @@ public class SimulatorActivity extends SDLActivity
         root.addView(buildTopBar(), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(44)));
 
-        bridgeLine = new TextView(this);
-        bridgeLine.setTextColor(Color.parseColor("#9ECBFF"));
-        bridgeLine.setTextSize(11f);
-        bridgeLine.setBackgroundColor(Color.parseColor("#1F2A36"));
-        bridgeLine.setPadding(dp(12), dp(3), dp(12), dp(3));
-        bridgeLine.setVisibility(View.GONE);
-        root.addView(bridgeLine, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        // The panel, with the page keys laid over its right edge rather than
+        // beside it. Beside it they took width the panel needs: in real-size
+        // mode there is a fixed amount to give, and a 46dp column left 906 px
+        // where 908 were needed, so the panel was quietly clipped. Over the top
+        // it costs nothing. The front row still sits underneath, mirroring
+        // where the device carries them. X4 is the only wired device profile,
+        // so this is X4's arrangement.
         panelHolder = new FrameLayout(this);
         panelHolder.setBackgroundColor(Color.parseColor("#0E0E0E"));
-        LinearLayout.LayoutParams holderParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        root.addView(panelHolder, holderParams);
+        root.addView(panelHolder, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         panelHolder.addView(mLayout);
 
-        root.addView(buildButtonBar(), new LinearLayout.LayoutParams(
+        FrameLayout.LayoutParams sideParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT);
+        sideParams.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+        sideKeys = buildSideKeys();
+        panelHolder.addView(sideKeys, sideParams);
+
+        root.addView(buildFrontKeys(), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -236,6 +259,18 @@ public class SimulatorActivity extends SDLActivity
         bar.addView(subtitle, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
+        // A token, not a sentence. The full messages go to logcat under
+        // ExplorInkBridge; a status line wide enough to hold them was eating
+        // screen the panel wants.
+        bridgeLine = new TextView(this);
+        bridgeLine.setTextColor(Color.parseColor("#9ECBFF"));
+        bridgeLine.setTextSize(12f);
+        bridgeLine.setVisibility(View.GONE);
+        bridgeLine.setPadding(0, 0, dp(8), 0);
+        bar.addView(bridgeLine, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         Button menu = new Button(this);
         menu.setText("⋮");
         menu.setTextSize(18f);
@@ -257,6 +292,20 @@ public class SimulatorActivity extends SDLActivity
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                         .putString(KEY_MODE, m.name()).apply();
                 applyMode();
+                return true;
+            });
+        }
+        // Real buttons, rarely pressed. On screen they cost more room than they
+        // earn.
+        final String[][] rare = {
+                { "Power", String.valueOf(KeyEvent.KEYCODE_P) },
+                { "Sleep", String.valueOf(KeyEvent.KEYCODE_S) },
+                { "Home key (X4 Pro)", String.valueOf(KeyEvent.KEYCODE_H) },
+        };
+        for (String[] spec : rare) {
+            final int keycode = Integer.parseInt(spec[1]);
+            popup.getMenu().add(spec[0]).setOnMenuItemClickListener(clicked -> {
+                tapKey(keycode);
                 return true;
             });
         }
@@ -297,10 +346,58 @@ public class SimulatorActivity extends SDLActivity
                 note = "fit";
                 break;
         }
-        lp.gravity = Gravity.CENTER;
+        // FIT centres in the space it is given. A fixed size is placed by the
+        // margin computed after layout below, so it anchors left: centring
+        // would overflow both edges once it is wider than the space.
+        lp.gravity = (mode == Mode.FIT)
+                ? Gravity.CENTER
+                : (Gravity.START | Gravity.CENTER_VERTICAL);
+        wantedWidth = lp.width;
+        wantedHeight = lp.height;
         mLayout.setLayoutParams(lp);
         mLayout.requestLayout();
-        subtitle.setText(mode.label + "  ·  " + note);
+        final String text = mode.label + "  ·  " + note;
+        subtitle.setText(text);
+        mLayout.post(() -> placePanel(text));
+    }
+
+    /**
+     * Runs once the panel has a real size, which is the only point at which the
+     * space actually available is known.
+     *
+     * Two things it settles. Saying "real size" over a panel the layout had to
+     * clip would be a lie, so a clip is named. And the side keys sit in the
+     * strip to the panel's right rather than on top of it: the panel shifts
+     * left into whatever room is left, but never past the left edge -- if a
+     * fixed size is wider than the space, the keys overlap rather than the
+     * panel running off screen.
+     */
+    private void placePanel(String text) {
+        if (wantedWidth <= 0 || wantedHeight <= 0) {
+            return;      // FIT: nothing fixed to place or to clip.
+        }
+        int gotW = mLayout.getWidth();
+        int gotH = mLayout.getHeight();
+        String suffix = "";
+        if (gotW < wantedWidth || gotH < wantedHeight) {
+            suffix = "  ·  clipped to " + gotW + "x" + gotH;
+        }
+
+        int keysWidth = (sideKeys != null) ? sideKeys.getWidth() : 0;
+        int free = panelHolder.getWidth() - keysWidth - gotW;
+        int leftMargin = Math.max(0, free / 2);
+        if (free < 0) {
+            suffix = "  ·  keys overlap, no room";
+        }
+        ViewGroup.LayoutParams raw = mLayout.getLayoutParams();
+        if (raw instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams panelLp = (FrameLayout.LayoutParams) raw;
+            if (panelLp.leftMargin != leftMargin) {
+                panelLp.leftMargin = leftMargin;
+                mLayout.setLayoutParams(panelLp);
+            }
+        }
+        subtitle.setText(text + suffix);
     }
 
     // --------------------------------------------------------------- buttons
@@ -310,51 +407,82 @@ public class SimulatorActivity extends SDLActivity
      * the scancode HalGPIO already maps (src/HalGPIO.cpp:35-50), so no firmware
      * or HAL change is involved and a press is indistinguishable from a
      * keyboard press on the desktop simulator.
+     *
+     * The rarely-pressed ones -- power, sleep, the X4 Pro home key -- are in the
+     * top bar's menu rather than on screen.
      */
-    private View buildButtonBar() {
+    private View buildFrontKeys() {
         LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.VERTICAL);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setBackgroundColor(Color.parseColor("#262626"));
         bar.setPadding(dp(6), dp(6), dp(6), dp(8));
-
-        bar.addView(row(new String[][] {
-                { "Back", String.valueOf(KeyEvent.KEYCODE_ESCAPE) },
-                { "Left", String.valueOf(KeyEvent.KEYCODE_DPAD_LEFT) },
-                { "Right", String.valueOf(KeyEvent.KEYCODE_DPAD_RIGHT) },
-                { "Select", String.valueOf(KeyEvent.KEYCODE_ENTER) },
-        }));
-        bar.addView(row(new String[][] {
-                { "Up", String.valueOf(KeyEvent.KEYCODE_DPAD_UP) },
-                { "Down", String.valueOf(KeyEvent.KEYCODE_DPAD_DOWN) },
-                { "Power", String.valueOf(KeyEvent.KEYCODE_P) },
-                { "Sleep", String.valueOf(KeyEvent.KEYCODE_S) },
-                { "Home", String.valueOf(KeyEvent.KEYCODE_H) },
-        }));
+        addKey(bar, "Back", KeyEvent.KEYCODE_ESCAPE, true);
+        addKey(bar, "Select", KeyEvent.KEYCODE_ENTER, true);
+        addKey(bar, "Left", KeyEvent.KEYCODE_DPAD_LEFT, true);
+        addKey(bar, "Right", KeyEvent.KEYCODE_DPAD_RIGHT, true);
         return bar;
     }
 
-    private View row(String[][] buttons) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        for (String[] spec : buttons) {
-            Button b = new Button(this);
-            b.setText(spec[0]);
-            b.setAllCaps(false);
-            b.setTextSize(12f);
-            b.setTextColor(Color.WHITE);
-            b.setBackgroundColor(Color.parseColor("#3C3C3C"));
-            final int keycode = Integer.parseInt(spec[1]);
-            b.setOnClickListener(v -> {
-                SDLActivity.onNativeKeyDown(keycode);
-                SDLActivity.onNativeKeyUp(keycode);
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    0, dp(44), 1f);
-            lp.setMargins(dp(3), dp(3), dp(3), dp(3));
-            row.addView(b, lp);
-        }
-        return row;
+    /**
+     * The page keys, over the panel's right edge and centred vertically, in the
+     * order the device has them: Up above Down. Translucent, because they sit
+     * on top of the map rather than next to it.
+     */
+    private View buildSideKeys() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_VERTICAL);
+        addKey(column, "Up", KeyEvent.KEYCODE_DPAD_UP, false);
+        addKey(column, "Down", KeyEvent.KEYCODE_DPAD_DOWN, false);
+        return column;
     }
+
+    private void addKey(LinearLayout parent, String label, int keycode,
+            boolean horizontal) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(12f);
+        b.setTextColor(Color.WHITE);
+        // The side keys are translucent: they overlay the map, and an opaque
+        // block there would hide part of what is being tested.
+        b.setBackgroundColor(Color.parseColor(horizontal ? "#3C3C3C" : "#B4303030"));
+        b.setPadding(0, 0, 0, 0);
+        b.setOnClickListener(v -> tapKey(keycode));
+
+        if (horizontal) {
+            LinearLayout.LayoutParams lp =
+                    new LinearLayout.LayoutParams(0, dp(38), 1f);
+            lp.setMargins(dp(3), dp(3), dp(3), dp(3));
+            parent.addView(b, lp);
+            return;
+        }
+
+        // A side key reads along the edge it sits on, so the text turns with
+        // it: rotated counter-clockwise, which puts the baseline against the
+        // right edge of the panel.
+        //
+        // Rotation is applied to the view and turns its box with it, so the
+        // button is laid out wide-and-short and wrapped in a holder of the
+        // resulting tall-and-narrow size. Rotating the box alone would leave
+        // the layout reserving the wrong rectangle.
+        FrameLayout holder = new FrameLayout(this);
+        FrameLayout.LayoutParams inner = new FrameLayout.LayoutParams(
+                dp(72), dp(34));
+        inner.gravity = Gravity.CENTER;
+        b.setRotation(-90f);
+        holder.addView(b, inner);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(34), dp(72));
+        lp.setMargins(dp(3), dp(3), dp(3), dp(3));
+        parent.addView(holder, lp);
+    }
+
+    private void tapKey(int keycode) {
+        SDLActivity.onNativeKeyDown(keycode);
+        SDLActivity.onNativeKeyUp(keycode);
+    }
+
 
     // -------------------------------------------------------------- wake
 
