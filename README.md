@@ -6,13 +6,21 @@
 
 A desktop simulator for [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader)-based firmware. Compiles the firmware natively and renders the e-ink display in an SDL2 window. No device required. Can be used with forks of Crosspoint but any new methods added to the firmware will need to be stubbed. If your fork diverges from the CrossPoint HAL, see [FORKING.md](FORKING.md).
 
+**It also builds for a phone.** The same firmware cross-compiled for `arm64-v8a`
+and packaged as an Android APK, hosted in an `SDLActivity`, so the UI runs with
+no reader in reach. Not an emulator: no ESP32 `.bin` is loaded, the APK carries
+the firmware as native code, and new firmware means a new APK. Setup, the two
+build scripts and the Android-specific traps are in
+[ANDROID.md](ANDROID.md).
+
 > [!NOTE]
-> **Platform support:** macOS and Linux/WSL use different native compiler and library flags. Start from `sample-platformio-macos.ini` on macOS, or `sample-platformio-linux-wsl.ini` on Linux/WSL. Native Windows is not supported; use WSL and follow the Linux instructions.
+> **Platform support:** macOS and Linux/WSL use different native compiler and library flags. Start from `sample-platformio-macos.ini` on macOS, or `sample-platformio-linux-wsl.ini` on Linux/WSL. Native Windows is not supported; use WSL and follow the Linux instructions. Android is a cross-compile rather than a host build and does not use those samples at all; see [ANDROID.md](ANDROID.md).
 
 > [!WARNING]
 > This has been tested on x86_64 macOS (Intel), ARM64 macOS (Apple Silicon,
-> M4), and Ubuntu under WSL on Windows. Other platforms may need additional
-> libraries or platform-specific stubs.
+> M4), Ubuntu under WSL on Windows, native Ubuntu, and Android 9 / 12 / 16 on
+> `arm64-v8a`. Other platforms may need additional libraries or
+> platform-specific stubs.
 
 ## Prerequisites
 
@@ -31,6 +39,12 @@ sudo dnf install SDL2-devel openssl-devel
 # Linux — Arch
 sudo pacman -S sdl2 openssl
 ```
+
+For Android nothing on that list applies. It needs the Android NDK, the Android
+SDK with build-tools, and a JDK, and it builds SDL2 from source with
+`ndk-build` rather than using a system package. OpenSSL is not needed at all
+there: it was only ever linked for MD5, and the Android build has its own. See
+[ANDROID.md](ANDROID.md).
 
 ## Integration
 
@@ -138,6 +152,13 @@ The `post:` line above only exposes the task in the consuming project UI. The ac
 
 Place EPUB books at `./fs_/books/` in the Crosspoint repo's root. This maps to the `/books/` path on the physical SD card.
 
+`./fs_` is relative to the working directory, which does not exist usefully on a
+phone: Android starts the process in `/`, which no app may write. There the card
+is the app's own private files directory instead, resolved from
+`SDL_AndroidGetInternalStoragePath()`, and content goes in over `adb` --
+[ANDROID.md](ANDROID.md) has the script. `CROSSPOINT_SIM_SD` still overrides it
+on every platform.
+
 ## Build and run
 
 Run this command from the Crosspoint project after you have added the `[env:simulator]` config to Crosspoint's `platformio.ini` file. Alternatively, if you added the project hook above, you can click "Build" from PlatformIO's IDE task list and then "Run Simulator" (nested under the "Custom" folder).
@@ -158,6 +179,22 @@ pio run -e simulator -t run_simulator
 | S      | Simulate sleep                     |
 | H      | X4 Pro capacitive Home key         |
 | Mouse  | Touch-device tap and swipe         |
+
+On Android there are no on-screen buttons yet, and a phone has no keyboard. The
+same keys arrive through `adb`, which reaches SDL via `SDLActivity`, so a
+scripted run works today and handing the phone to someone does not:
+
+```bash
+adb shell input keyevent 66    # Return -- confirm
+adb shell input keyevent 111   # Escape -- back
+adb shell input keyevent 19    # Up
+adb shell input keyevent 20    # Down
+```
+
+All four verified on a phone, not inferred from the keycode tables: the menu
+selection moves, opens and comes back. The phone has to be awake and the app in
+focus, or `am start` puts the activity behind the lock screen and every key goes
+nowhere.
 
 When the simulator is on the sleep screen, pressing any mapped simulator key wakes it. Under the hood the simulator relaunches itself and reports a synthetic power-button wake, because the native build has no real ESP deep-sleep resume path.
 
@@ -278,6 +315,13 @@ custom_simulator_http_port = 18080
 ```
 
 Direct binary launches use the environment variable form.
+
+All three servers bind `INADDR_LOOPBACK`, not `INADDR_ANY`
+(`src/WebServer.cpp:435`, `src/WebSocketsServer.cpp:349`,
+`src/CrossPointWebServer.cpp:1022`), so they are unreachable from the network.
+That is worth knowing on a phone, which is often on a network somebody else
+runs: the file manager is reachable only from the phone itself, or through
+`adb forward`.
 
 **Firmware updates**: OTA and SD-card firmware flashing are non-destructive in
 the simulator. The simulator stubs those update paths so the UI can be opened
