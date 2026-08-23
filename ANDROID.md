@@ -280,6 +280,55 @@ yet.
 `SimulatorActivity` is deliberately almost empty for the same reason: anything
 it could do, the native side can do without an ordering problem.
 
+## BLE works on a phone, driven from a laptop
+
+The simulator's NimBLE shim (`docs/ble-shim.md`) compiles and links for Android
+and runs there. Verified 2026-08-23 on a Galaxy S10 (Android 12):
+
+- 213 of 213 translation units compile and link, including the shim's four files
+  and the firmware's own `BlePositionServer.cpp`. `libmain.so` grows from 18.2 to
+  18.5 MB.
+- The shim's listener comes up on `127.0.0.1:8765` **when the map screen opens**,
+  not at boot -- the firmware starts BLE with `MapActivity`. Checked in
+  `/proc/net/tcp` (`0100007F:223D`, state 0A).
+- `adb forward tcp:8765 tcp:8765` makes that socket reachable from the laptop, so
+  **the existing laptop tools work against the phone unchanged**:
+  `python3 tools/blepos.py 48.3810 17.5930 --heading 4 --speed 42 --sim
+  127.0.0.1:8765` moved the map, turned the compass and put the packet's clock in
+  the header.
+
+So the firmware's real BLE code runs on the phone. What is missing for
+[plan A](../../docs/ble-bridge.md) -- a phone advertising for real, with the
+companion app on a second phone as the central -- is only the bridge between the
+shim's socket and Android's own `BluetoothGattServer`. `tools/blebridge.py` in
+the parent repo is the same translation against BlueZ and is the reference.
+
+Two things carry over from that bridge and are not optional. `auto_confirm` must
+be set false immediately, or the shim confirms its own indications and the real
+peer's timing is never measured. And the test devices have to be **different
+phones**: one runs the simulator as the peripheral, another runs the companion
+app as the central.
+
+### Every `CROSSPOINT_SIM_*` knob now works on Android
+
+The shim is off unless `CROSSPOINT_SIM_BLE_PORT` is set, and on Android nothing
+could set it -- the same reason the SD card path had to be resolved natively.
+That blocked every simulator knob, not just this one.
+
+`src/SimulatorAndroidEnv.cpp` reads `KEY=VALUE` lines from `<app files>/sim-env`
+at the top of `main()` and applies each with `setenv(..., 0)`, so a real
+environment variable still wins where one can be set. Off Android it compiles to
+nothing. `tools/android/set_env.sh` writes the file and restarts the activity:
+
+```bash
+tools/android/set_env.sh CROSSPOINT_SIM_BLE_PORT=8765 --serial <phone>
+tools/android/set_env.sh --clear --serial <phone>
+```
+
+`CROSSPOINT_SIM_INPUT_SCRIPT`, `CROSSPOINT_SIM_SCREENSHOTS` and
+`CROSSPOINT_SIM_HTTP_PORT` go in the same way, so the scripted-run harness is
+reachable on a phone too. Untested for those three.
+
 ## Open
 
 - **Linking the firmware** into `libmain.so`. Compiling is proven (208 of 208

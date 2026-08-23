@@ -5,6 +5,7 @@
 #include "Arduino.h"
 #include "HalDisplay.h"
 #include "HalGPIO.h"
+#include "SimulatorAndroidEnv.h"
 #include "SimulatorLifecycle.h"
 
 extern void setup();
@@ -13,6 +14,8 @@ extern HalDisplay display; // defined in main.cpp
 
 int main(int argc, char **argv) {
   SimulatorLifecycle::initProcessArgs(argv);
+  // Before anything reads a CROSSPOINT_SIM_* variable. No-op off Android.
+  SimulatorAndroidEnv::load();
   setup();
   while (!display.shouldQuit()) {
     // Clear input edge latches once per frame. update() may be called many
