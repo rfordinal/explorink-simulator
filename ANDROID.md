@@ -21,6 +21,7 @@ android/                     gradle project, AGP 8.13.2 / gradle 8.14.3 / JDK 17
 tools/android/fetch_sdl2.sh  fetch SDL2, build libSDL2.so, install both above
 tools/android/build_stub.sh  smoke-test libmain.so (tools/android/stub_main.c)
 tools/android/provision_sd.sh  push map tiles and a position onto a phone
+tools/android/set_mode.sh      set the panel size mode on a phone
 ```
 
 **Gradle compiles no C++.** The firmware is cross-compiled by PlatformIO and
@@ -106,10 +107,18 @@ different window sizes** (720x1560, 1080x2280, 720x1480). So it is not the
 window, the aspect ratio or the scaling -- it happens inside the panel's own
 480x800 coordinate space, before anything host-specific touches it.
 
-That still does not prove the device has it: every observation so far is from a
-simulator, and the simulator undoes the renderer's rotation itself
-(`src/HalDisplay.cpp`, `SDL_RenderCopyEx`). A device screenshot of the same
-screen is what would settle it.
+**And the rotation is exact, which closes the remaining doubt about the
+simulator being at fault.** Portrait logical size is 480x800; the destination
+rect is `{-160, 160, 800, 480}`, whose centre is (240, 400) -- exactly the
+centre of the logical space -- so rotating 90 degrees maps 800x480 onto 480x800
+with nothing left over (`src/HalDisplay.cpp`, `presentIfNeeded`). The
+screenshots agree: content occupies 720x1200 inside a 720x1560 window, which is
+480x800 scaled by exactly 1.5, with black bars top and bottom.
+
+So SDL is letterboxing perfectly and the buttons are drawn past x=480 by the
+firmware itself. The device renders into the same 480-wide framebuffer, so it
+clips them the same way. A device screenshot would still be worth having, but
+the simulator is no longer a plausible culprit.
 
 What that pass establishes:
 
@@ -121,6 +130,66 @@ What that pass establishes:
   .../libmain.so`.
 - Renderer size is the phone's full screen, not the panel's 480x800. Scaling the
   panel into it is still open.
+
+## What the app looks like
+
+Three parts stacked: a bar with the size menu, the panel, and the device's
+buttons.
+
+**The buttons are the device's, not Android's.** Back, Left, Right, Select on
+the first row; Up, Down, Power, Sleep, Home on the second. Each one calls
+`SDLActivity.onNativeKeyDown/Up` with the Android keycode SDL turns into the
+scancode `HalGPIO` already maps (`src/HalGPIO.cpp:35-50`). So a tap is
+indistinguishable from a keyboard press on the desktop simulator, and neither
+`HalGPIO` nor anything else in the HAL changed. `adb shell input keyevent`
+still works and goes through the same path.
+
+**Three panel sizes**, from the bar's menu or `tools/android/set_mode.sh`:
+
+| mode | what it is |
+|---|---|
+| `FIT` | the panel fills the space available. SDL letterboxes, so the aspect is right and the pixels are scaled. |
+| `ONE_TO_ONE` | one panel pixel to one screen pixel, 480x800. On a dense phone this is physically **smaller** than the real device. |
+| `REAL` | the panel's physical size: 480x800 at 220 PPI is 55x92 mm (parent repo `README.md:130`). Scaled by the screen's own `xdpi`/`ydpi`. |
+
+`ONE_TO_ONE` being smaller than `REAL` is the point of having both: a phone is
+denser than the reader, so pixel-perfect and life-size are different pictures.
+`REAL` is only as honest as the phone's reported density, and some phones round
+it.
+
+All three are the size of the SDL surface in the Android layout, nothing more.
+The renderer keeps its 480x800 logical size and SDL maps it, so no firmware or
+HAL code is involved. The mode is remembered in `SharedPreferences`, read in
+`onCreate`, which is why `set_mode.sh` restarts the activity.
+
+Panel geometry and PPI are constants in `SimulatorActivity` and have to track
+the simulator's compiled device profile. Only the X4 env is wired, so only X4's
+numbers are there.
+
+## The sleep timer killed the app, and that is fixed
+
+The firmware sleeps on an idle timer, and waking from its sleep screen is a
+**fresh process**: a native build has no ESP deep-sleep resume path, so the
+desktop simulator relaunches itself with `execvp(gArgv[0], gArgv)`
+(`src/SimulatorLifecycle.cpp`).
+
+On Android that killed the app. SDL sets `argv[0]` to `"app_process"`, so
+`execvp` replaced the app with a bare system binary that died immediately. It
+looked exactly like a crash, and because the trigger is an idle timer it
+happened unattended -- two phones left alone were simply gone.
+
+`rebootAsPowerWake()` now asks Java for a fresh activity
+(`SimulatorActivity.relaunchForWake()`) and exits, so Android starts a new
+process. Two details:
+
+- **The wake reason cannot travel in the environment**, because a relaunched
+  process does not inherit it. It goes through a marker file in app-private
+  storage, written before the exit and consumed on the next start.
+- **The Java side blocks until the intent is submitted**, because the caller
+  `_exit(0)`s the moment it returns.
+
+Verified on a phone: pressing Sleep then Select changes the process id and comes
+back to Home, instead of the app vanishing.
 
 ## Two Android facts that cost time
 
@@ -171,6 +240,15 @@ it rather than stretched.
 The requested window size is ignored on Android -- the window is whatever the
 activity got, 720x1560 here -- so the 480x800 in that call is documentation, not
 a request.
+
+### Edge-to-edge is not optional
+
+`targetSdk` 36 means Android 15 and up draw the app under the status and
+navigation bars. The first layout looked right in a screenshot and was not: the
+top bar sat behind the status bar and the second row of buttons under the
+navigation bar, clipped. Fixed with an `OnApplyWindowInsetsListener` on the root
+view that turns the system-bar insets into padding, with the pre-API-30 branch
+for the older phones.
 
 ### `set -o pipefail` and a grep that matches nothing
 
