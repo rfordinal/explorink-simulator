@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The firmware runs its own HTTP server on localhost. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-feature android:glEsVersion="0x00020000" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:label="ExplorInk Simulator"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true">
+
+        <!-- Theme is NoTitleBar, not NoTitleBar.Fullscreen. A white screen with
+             no status bar reads as a broken phone, and the panel is 480x800
+             anyway: it gets letterboxed with room for on-screen buttons. -->
+        <activity
+            android:name=".SimulatorActivity"
+            android:exported="true"
+            android:label="ExplorInk Simulator"
+            android:screenOrientation="portrait"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@android:style/Theme.NoTitleBar"
+            android:preferMinimalPostProcessing="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,9 @@
+# Prebuilt native libraries: libSDL2.so comes from tools/android/fetch_sdl2.sh,
+# libmain.so is the cross-compiled firmware. Neither is source.
+android/app/src/main/jniLibs/
+# SDL's own Java classes, copied in by the same script rather than vendored.
+android/app/src/main/java-sdl/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

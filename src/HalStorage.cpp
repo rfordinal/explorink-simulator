@@ -10,6 +10,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+
+#if defined(__ANDROID__)
+#include <SDL.h>
+#endif
 #include <sstream>
 #include <vector>
 
@@ -22,7 +26,20 @@ std::string configuredStorageRoot() {
   if (!root || !*root) {
     root = std::getenv("CROSSPOINT_EMU_SD");
   }
-  return (root && *root) ? std::string(root) : std::string("./fs_");
+  if (root && *root)
+    return std::string(root);
+#if defined(__ANDROID__)
+  // "./fs_" is relative to the process working directory. On Android that is
+  // "/", which no app may write, so the default has to come from somewhere
+  // else. SDL hands back this app's private files directory.
+  //
+  // It has to happen here and not in Java: SDLActivity.onCreate is where the
+  // native libraries are loaded, so Java cannot call setenv before any native
+  // code exists, and after that the SDL thread may already be running.
+  if (const char *internal = SDL_AndroidGetInternalStoragePath())
+    return std::string(internal) + "/fs_";
+#endif
+  return std::string("./fs_");
 }
 
 bool containsUnsafeSegment(const std::string &path) {
