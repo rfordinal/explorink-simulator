@@ -69,8 +69,20 @@ final class BleBridge {
     private static final int NIMBLE_NOTIFY = 0x0010;
     private static final int NIMBLE_INDICATE = 0x0020;
 
+    /**
+     * What the bridge is, not what it last said. The two were the same thing
+     * once and it was wrong: the indicator followed log messages, so the
+     * firmware's "asked for new conn params" a few seconds after every connect
+     * knocked it back to unknown.
+     */
+    enum State { OFF, ATTACHED, ADVERTISING, CONNECTED }
+
     interface StatusListener {
+        /** Log-shaped, for people reading along. */
         void onBridgeStatus(String status);
+
+        /** The actual state, for anything that draws it. */
+        void onBridgeState(State state);
     }
 
     private final Context context;
@@ -141,6 +153,18 @@ final class BleBridge {
         }
     }
 
+    private State state = State.OFF;
+
+    private void setState(State next) {
+        if (state == next) {
+            return;
+        }
+        state = next;
+        if (listener != null) {
+            main.post(() -> listener.onBridgeState(next));
+        }
+    }
+
     /**
      * The shim only starts listening when the firmware brings BLE up, which
      * happens when the map screen opens -- not at boot. So this retries instead
@@ -154,6 +178,7 @@ final class BleBridge {
                 s.setTcpNoDelay(true);
                 socket = s;
                 out = s.getOutputStream();
+                setState(State.ATTACHED);
                 status("attached to the simulator on port " + port);
                 // Before anything else: the shim confirms its own indications
                 // by default, and that would make the real peer's confirm
@@ -175,6 +200,7 @@ final class BleBridge {
                 break;
             }
         }
+        setState(State.OFF);
         status("bridge stopped");
     }
 
@@ -385,6 +411,7 @@ final class BleBridge {
             @Override
             public void onStartSuccess(AdvertiseSettings settingsInEffect) {
                 advertising = true;
+                setState(peer != null ? State.CONNECTED : State.ADVERTISING);
                 status("advertising " + serviceUuid + " -- the phone can connect");
             }
 
@@ -422,6 +449,7 @@ final class BleBridge {
         server = null;
         peer = null;
         advertising = false;
+        setState(socket != null ? State.ATTACHED : State.OFF);
         mtu = 0;
         awaitingConfirm = null;
         chars.clear();
@@ -495,8 +523,10 @@ final class BleBridge {
                 // which one, and with several phones on a bench that is
                 // exactly the question. Compare against `settings get secure
                 // bluetooth_address` on the phone you think it is.
+                setState(State.CONNECTED);
                 status("a central connected: " + safeAddress(device));
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                setState(advertising ? State.ADVERTISING : State.ATTACHED);
                 status("the central left: " + safeAddress(device));
                 peer = null;
                 cccd.clear();
