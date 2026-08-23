@@ -1,7 +1,9 @@
 package org.explorink.simulator;
 
+import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.os.Build;
@@ -33,7 +35,11 @@ import org.libsdl.app.SDLActivity;
  * firmware or the HAL -- buttons go in as key events through SDL's own
  * onNativeKeyDown, so HalGPIO sees exactly what a keyboard would send.
  */
-public class SimulatorActivity extends SDLActivity {
+public class SimulatorActivity extends SDLActivity
+        implements BleBridge.StatusListener {
+
+    /** Runtime Bluetooth permissions, Android 12 and up. */
+    private static final int REQ_BLUETOOTH = 41;
 
     /**
      * Panel geometry. Must track the simulator's compiled device profile: the
@@ -61,6 +67,8 @@ public class SimulatorActivity extends SDLActivity {
     private Mode mode = Mode.FIT;
     private FrameLayout panelHolder;
     private TextView subtitle;
+    private TextView bridgeLine;
+    private BleBridge bridge;
 
     @Override
     protected String[] getLibraries() {
@@ -80,6 +88,71 @@ public class SimulatorActivity extends SDLActivity {
 
         buildChrome();
         applyMode();
+        startBridgeIfConfigured();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (bridge != null) {
+            bridge.stop();
+            bridge = null;
+        }
+        super.onDestroy();
+    }
+
+    // ------------------------------------------------------------ ble bridge
+
+    /**
+     * The bridge only exists when the shim does: it is off unless
+     * CROSSPOINT_SIM_BLE_PORT is set, and that comes from the same sim-env file
+     * the native side reads.
+     */
+    private void startBridgeIfConfigured() {
+        int port = SimEnv.blePort(this);
+        if (port == 0) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            String[] needed = {
+                    Manifest.permission.BLUETOOTH_ADVERTISE,
+                    Manifest.permission.BLUETOOTH_CONNECT,
+            };
+            for (String permission : needed) {
+                if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                    onBridgeStatus("waiting for Bluetooth permission");
+                    requestPermissions(needed, REQ_BLUETOOTH);
+                    return;
+                }
+            }
+        }
+        bridge = new BleBridge(this, port, this);
+        bridge.start();
+        onBridgeStatus("bridge starting on port " + port);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQ_BLUETOOTH) {
+            return;
+        }
+        for (int result : results) {
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                onBridgeStatus("Bluetooth permission refused, no bridge");
+                return;
+            }
+        }
+        startBridgeIfConfigured();
+    }
+
+    @Override
+    public void onBridgeStatus(String text) {
+        if (bridgeLine == null) {
+            return;
+        }
+        bridgeLine.setVisibility(View.VISIBLE);
+        bridgeLine.setText("BLE: " + text);
     }
 
     // ---------------------------------------------------------------- chrome
@@ -104,6 +177,16 @@ public class SimulatorActivity extends SDLActivity {
 
         root.addView(buildTopBar(), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(44)));
+
+        bridgeLine = new TextView(this);
+        bridgeLine.setTextColor(Color.parseColor("#9ECBFF"));
+        bridgeLine.setTextSize(11f);
+        bridgeLine.setBackgroundColor(Color.parseColor("#1F2A36"));
+        bridgeLine.setPadding(dp(12), dp(3), dp(12), dp(3));
+        bridgeLine.setVisibility(View.GONE);
+        root.addView(bridgeLine, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         panelHolder = new FrameLayout(this);
         panelHolder.setBackgroundColor(Color.parseColor("#0E0E0E"));

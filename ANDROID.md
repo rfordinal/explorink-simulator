@@ -280,6 +280,65 @@ yet.
 `SimulatorActivity` is deliberately almost empty for the same reason: anything
 it could do, the native side can do without an ordering problem.
 
+## Real Bluetooth, phone to phone
+
+**Verified 2026-08-23.** The companion app on a Galaxy S24 Ultra connected over
+actual Bluetooth to the simulator on a Galaxy S10, and the firmware took the
+phone's real GPS fix and redrew the map. No laptop in the path.
+
+`BleBridge.java` is the bridge: a socket client on the shim's loopback port on
+one side, an Android `BluetoothGattServer` and `BluetoothLeAdvertiser` on the
+other. It is a translation and nothing more -- every decision it makes for
+itself is a decision the test stops testing. `tools/blebridge.py` in the parent
+repo is the same translation against BlueZ and was the reference.
+
+It starts by itself when `CROSSPOINT_SIM_BLE_PORT` is set, and retries until the
+shim is listening -- which is when the map screen opens, not at boot. A status
+line under the top bar says where it is.
+
+From the first run's log: four characteristics built from the shim's own `gatt`
+event (props 8, 56, 8, 32), the service UUID advertised, a central connected,
+both indicate-capable characteristics subscribed, MTU 517.
+
+**Three things Android does better than BlueZ did**, and the bridge uses all
+three:
+
+- **The CCCD write arrives with its value**, so `subscribe` carries the bit the
+  central actually wrote (`value 2`, indicate). The BlueZ bridge could only
+  report what the characteristic was capable of, so the firmware never learned
+  which the peer chose (parent `docs/ble-bridge.md`).
+- **The negotiated MTU has its own callback**, instead of arriving only as a
+  side effect of a write.
+- **Notify versus indicate is the peripheral's choice here**, made from that
+  CCCD value, which is what a real device does.
+
+Two things it cannot forward, both because the real stack owns the decision, and
+both the same on BlueZ: `connparams_request` (Android gives a peripheral no way
+to answer) and a read, which is answered locally from the last pushed value
+because the wire protocol has no read op and the firmware exposes nothing
+readable.
+
+Android also does not tell `onNotificationSent` which characteristic it belongs
+to. The bridge records the one it indicated rather than guessing from the
+subscription set, which would confirm a characteristic that was never sent.
+
+### Two rules for running it
+
+- **Different phones.** One runs the simulator as the peripheral, another the
+  companion app as the central. Not one phone doing both.
+- **A run carries the rider's real position.** The companion app sends its
+  actual GPS, so the firmware's screen, any screenshot of it and any log
+  identify where the maintainer is. Those stay on the local machine -- same rule
+  as device screenshots in the parent `CLAUDE.md`.
+
+`auto_confirm` is sent `false` the moment the bridge attaches. With the shim
+confirming its own indications the phone's real confirm timing -- the entire
+reason for a real radio -- is never measured.
+
+Permissions: `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT`, requested at runtime
+on Android 12 and up, with the pre-31 pair declared for the older phone.
+`neverForLocation` is on `BLUETOOTH_CONNECT` because nothing here scans.
+
 ## BLE works on a phone, driven from a laptop
 
 The simulator's NimBLE shim (`docs/ble-shim.md`) compiles and links for Android
