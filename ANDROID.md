@@ -144,6 +144,19 @@ indistinguishable from a keyboard press on the desktop simulator, and neither
 `HalGPIO` nor anything else in the HAL changed. `adb shell input keyevent`
 still works and goes through the same path.
 
+The buttons follow the device rather than the phone: the front row underneath
+the panel (Back, Select, Left, Right) and the page keys on the right edge, Up
+above Down, their text turned to read along that edge with the baseline against
+it. Power, sleep and the X4 Pro home key are in the top bar's menu -- real
+buttons, rarely pressed, and not worth the screen.
+
+**The panel is never covered and never runs off.** A fixed-size panel is shifted
+left so the page keys sit in the strip beside it, not on top of it. If a size is
+wider than the room available the keys overlap instead, because the alternative
+is the panel disappearing off the left edge, and the bar says `keys overlap, no
+room`. A panel the layout had to clip says `clipped to WxH` rather than claiming
+a size it does not have.
+
 **Three panel sizes**, from the bar's menu or `tools/android/set_mode.sh`:
 
 | mode | what it is |
@@ -279,6 +292,190 @@ yet.
 
 `SimulatorActivity` is deliberately almost empty for the same reason: anything
 it could do, the native side can do without an ordering problem.
+
+## Real Bluetooth, phone to phone
+
+**Verified 2026-08-23.** The companion app on a Galaxy S24 Ultra connected over
+actual Bluetooth to the simulator on a Galaxy S10, and the firmware took the
+phone's real GPS fix and redrew the map. No laptop in the path.
+
+`BleBridge.java` is the bridge: a socket client on the shim's loopback port on
+one side, an Android `BluetoothGattServer` and `BluetoothLeAdvertiser` on the
+other. It is a translation and nothing more -- every decision it makes for
+itself is a decision the test stops testing. `tools/blebridge.py` in the parent
+repo is the same translation against BlueZ and was the reference.
+
+It starts by itself when `CROSSPOINT_SIM_BLE_PORT` is set, and retries until the
+shim is listening -- which is when the map screen opens, not at boot. A status
+line under the top bar says where it is.
+
+From the first run's log: four characteristics built from the shim's own `gatt`
+event (props 8, 56, 8, 32), the service UUID advertised, a central connected,
+both indicate-capable characteristics subscribed, MTU 517.
+
+**Three things Android does better than BlueZ did**, and the bridge uses all
+three:
+
+- **The CCCD write arrives with its value**, so `subscribe` carries the bit the
+  central actually wrote (`value 2`, indicate). The BlueZ bridge could only
+  report what the characteristic was capable of, so the firmware never learned
+  which the peer chose (parent `docs/ble-bridge.md`).
+- **The negotiated MTU has its own callback**, instead of arriving only as a
+  side effect of a write.
+- **Notify versus indicate is the peripheral's choice here**, made from that
+  CCCD value, which is what a real device does.
+
+Two things it cannot forward, both because the real stack owns the decision, and
+both the same on BlueZ: `connparams_request` (Android gives a peripheral no way
+to answer) and a read, which is answered locally from the last pushed value
+because the wire protocol has no read op and the firmware exposes nothing
+readable.
+
+Android also does not tell `onNotificationSent` which characteristic it belongs
+to. The bridge records the one it indicated rather than guessing from the
+subscription set, which would confirm a characteristic that was never sent.
+
+### Killing the app does not drop the link, and the peer does not notice
+
+Tested 2026-08-23, deliberately: the simulator was `force-stop`ped mid-link, so
+no teardown of ours ran.
+
+**Both Bluetooth stacks kept the ACL connection.** The next GATT server this side
+opened was handed the existing central immediately -- one millisecond *before*
+`onStartSuccess`, same peer address, and with no CCCD write and no MTU exchange.
+That left the firmware believing a central was connected while that central
+believed it was subscribed to a GATT table that no longer existed. Indications
+would have gone nowhere.
+
+Fixed here: a central that arrives before this server has started advertising is
+not answering our advertisement, so `dropStaleLink()` drops it. Verified --
+`dropping a link left over from a previous run` in the log, then a clean
+advertisement.
+
+**The peer is still wedged, and that is not fixable from this side.** The
+companion app's own on-screen log, four minutes after the kill and after our
+drop: still `connected to Galaxy S10`, no disconnect line, `last sent 20:46:22`.
+`BluetoothGattServer.cancelConnection` releases this server's reference and does
+not tear the ACL down while the other side holds it.
+
+The parent repo's `docs/ble-bridge.md` left exactly this open -- "whether a clean
+GATT disconnect from the BlueZ side is enough, or the app also needs a fix for a
+peer that vanishes". It is not enough. The app needs to notice a peer that stops
+answering, which is app-side work.
+
+Incidentally, this is also what finally proved which device was connecting. The
+peer's address is a rotating random one and says nothing; the app's own log says
+`found: Galaxy S10` and `connected: Galaxy S10`, matching the scan response's
+device name.
+
+### Two rules for running it
+
+- **Different phones.** One runs the simulator as the peripheral, another the
+  companion app as the central. Not one phone doing both.
+- **A run carries the rider's real position.** The companion app sends its
+  actual GPS, so the firmware's screen, any screenshot of it and any log
+  identify where the maintainer is. Those stay on the local machine -- same rule
+  as device screenshots in the parent `CLAUDE.md`.
+
+`auto_confirm` is sent `false` the moment the bridge attaches. With the shim
+confirming its own indications the phone's real confirm timing -- the entire
+reason for a real radio -- is never measured.
+
+Permissions: `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT`, requested at runtime
+on Android 12 and up, with the pre-31 pair declared for the older phone.
+`neverForLocation` is on `BLUETOOTH_CONNECT` because nothing here scans.
+
+## BLE works on a phone, driven from a laptop
+
+The simulator's NimBLE shim (`docs/ble-shim.md`) compiles and links for Android
+and runs there. Verified 2026-08-23 on a Galaxy S10 (Android 12):
+
+- 213 of 213 translation units compile and link, including the shim's four files
+  and the firmware's own `BlePositionServer.cpp`. `libmain.so` grows from 18.2 to
+  18.5 MB.
+- The shim's listener comes up on `127.0.0.1:8765` **when the map screen opens**,
+  not at boot -- the firmware starts BLE with `MapActivity`. Checked in
+  `/proc/net/tcp` (`0100007F:223D`, state 0A).
+- `adb forward tcp:8765 tcp:8765` makes that socket reachable from the laptop, so
+  **the existing laptop tools work against the phone unchanged**:
+  `python3 tools/blepos.py 48.3810 17.5930 --heading 4 --speed 42 --sim
+  127.0.0.1:8765` moved the map, turned the compass and put the packet's clock in
+  the header.
+
+The header's Bluetooth indicator tracks it live: the `X` over the bars means
+`connIntervalMs() == 0`, no central connected
+(`firmware/explorink/docs/map-header-status.md`). A one-shot tool disconnects
+when it exits, so a screenshot taken afterwards correctly shows the `X` again --
+worth knowing before reading it as a failure. With a client holding the link
+open, the bars replace it.
+
+**One client at a time, and a killed client costs the next one.** The shim
+refuses a second client (`docs/ble-shim.md`, "The second client is refused").
+A tool killed mid-run left its socket behind for long enough that the next
+attempt died on `ConnectionResetError: Connection lost` at its first write --
+which reads like a firmware or transport fault and is neither. Check
+`/proc/net/tcp` for a live connection to the port before blaming anything else.
+That matters for the Android bridge, which will be that single client.
+
+So the firmware's real BLE code runs on the phone. What is missing for
+[plan A](../../docs/ble-bridge.md) -- a phone advertising for real, with the
+companion app on a second phone as the central -- is only the bridge between the
+shim's socket and Android's own `BluetoothGattServer`. `tools/blebridge.py` in
+the parent repo is the same translation against BlueZ and is the reference.
+
+Two things carry over from that bridge and are not optional. `auto_confirm` must
+be set false immediately, or the shim confirms its own indications and the real
+peer's timing is never measured. And the test devices have to be **different
+phones**: one runs the simulator as the peripheral, another runs the companion
+app as the central.
+
+### Every `CROSSPOINT_SIM_*` knob now works on Android
+
+The shim is off unless `CROSSPOINT_SIM_BLE_PORT` is set, and on Android nothing
+could set it -- the same reason the SD card path had to be resolved natively.
+That blocked every simulator knob, not just this one.
+
+`src/SimulatorAndroidEnv.cpp` reads `KEY=VALUE` lines from `<app files>/sim-env`
+at the top of `main()` and applies each with `setenv(..., 0)`, so a real
+environment variable still wins where one can be set. Off Android it compiles to
+nothing. `tools/android/set_env.sh` writes the file and restarts the activity:
+
+```bash
+tools/android/set_env.sh CROSSPOINT_SIM_BLE_PORT=8765 --serial <phone>
+tools/android/set_env.sh --clear --serial <phone>
+```
+
+`CROSSPOINT_SIM_INPUT_SCRIPT`, `CROSSPOINT_SIM_SCREENSHOTS` and
+`CROSSPOINT_SIM_HTTP_PORT` go in the same way, so the scripted-run harness is
+reachable on a phone too. Untested for those three.
+
+## A coloured fringe around the panel, and the wrong theory about it
+
+In a fixed-size mode (1:1 or real size) the panel has a one-to-two pixel
+olive-green edge. Measured, not eyeballed: at the left border the pixels run
+`(14,14,14)` surround, then `(136,169,52)`, `(185,215,107)`, `(204,225,148)`,
+`(232,242,207)`, then white. A five-pixel gradient, so it is a blend, not a line
+anything drew.
+
+**It was the renderer's clear colour, and it is fixed.** `SDL_RenderClear` was
+called in `HalDisplay.cpp` without `SDL_SetRenderDrawColor` appearing anywhere in
+that file, so the surround was cleared with whatever draw colour happened to be
+current. Setting it to black changed the border pixels from `(136,169,52)` to
+`(0,0,0)`, measured, in five consecutive captures.
+
+Two honest caveats, because this was got wrong twice on the way:
+
+- One capture showed the fringe from an APK that already carried the fixed
+  library. Whether that process had actually loaded it was not established, so
+  the possibility that the fringe is also intermittent is not ruled out.
+- It is not a developer option; `show_surface_updates`, `debug.layout` and
+  `debug.hwui.*` are all unset on the phone. That was checked before guessing.
+
+The five-pixel gradient is what a scaled edge looks like with
+`SDL_HINT_RENDER_SCALE_QUALITY=1` blending the texture edge against the
+surround, which is why the surround's colour is what showed. That hint is
+deliberate: nearest filtering turns Bayer dithering into hard stripes (the
+fork's `CLAUDE.md`).
 
 ## Open
 
