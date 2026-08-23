@@ -45,7 +45,9 @@ public:
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
   void waitRefreshComplete();
   bool supportsAsyncRefresh() const;
-  void displayWindow(int x, int y, int w, int h);
+  // ExplorInk HAL: partial-window refresh carries the same turnOffScreen flag
+  // as the full-panel calls, and takes uint16_t like the rest of the geometry.
+  void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH,
                       bool turnOffScreen = false);
   void setBusyWaitSliceHook(bool (*)(int8_t, uint8_t)) {}

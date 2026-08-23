@@ -39,6 +39,20 @@ inline void yield() { std::this_thread::yield(); }
 // idle pull-up state used by the button diagnostics in firmware startup.
 inline int digitalRead(int /*pin*/) { return 1; }
 
+// The pin-direction and pin-write half of the same API. Board profiles power
+// rails up and down at startup (BoardConfig's SD rail helpers), so these have
+// to link even though there is nothing behind them on a native build.
+#define LOW 0x0
+#define HIGH 0x1
+#define INPUT 0x01
+#define OUTPUT 0x03
+#define INPUT_PULLUP 0x05
+#define INPUT_PULLDOWN 0x09
+
+inline void pinMode(int /*pin*/, int /*mode*/) {}
+inline void digitalWrite(int /*pin*/, int /*value*/) {}
+inline int analogRead(int /*pin*/) { return 0; }
+
 #include "HardwareSerial.h"
 #include "Print.h"
 #include "WString.h"

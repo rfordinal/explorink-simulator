@@ -50,6 +50,11 @@ public:
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
 
+  // ExplorInk HAL addition. The power log and the map header read millivolts
+  // directly, not just the percentage. No ADC here: report a mid-charge
+  // Li-ion cell so the value is in range and stays put across a run.
+  uint16_t getBatteryMillivolts(uint8_t /*samples*/ = 8) const { return 3900; }
+
   // RAII helper class to manage power saving locks
   // Usage: create an instance of Lock in a scope to disable power saving, for
   // example when running a task that needs full performance. When the Lock

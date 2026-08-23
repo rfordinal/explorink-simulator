@@ -19,6 +19,10 @@ public:
     return size;
   }
   int available() override { return 0; }
+  // stderr never applies back-pressure, so the TX buffer is always empty.
+  // Firmware that chunks a long reply against availableForWrite() needs a
+  // positive number here or it stalls until its own timeout.
+  int availableForWrite() { return 1024; }
   int read() override { return -1; }
   int peek() override { return -1; }
   template <typename... Args> void printf(const char *format, Args... args) {

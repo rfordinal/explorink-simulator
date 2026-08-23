@@ -401,8 +401,10 @@ void HalDisplay::waitRefreshComplete() {}
 
 bool HalDisplay::supportsAsyncRefresh() const { return false; }
 
-void HalDisplay::displayWindow(int, int, int, int) {
-  refreshDisplay(RefreshMode::FAST_REFRESH, false);
+void HalDisplay::displayWindow(uint16_t, uint16_t, uint16_t, uint16_t, bool turnOffScreen) {
+  // No windowed update on the host: repaint the whole texture. The window
+  // rectangle only matters for panel timing, which is not modelled.
+  refreshDisplay(RefreshMode::FAST_REFRESH, turnOffScreen);
 }
 
 // Called from the render task (background thread): convert framebuffer to

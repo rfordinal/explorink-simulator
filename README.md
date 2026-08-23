@@ -1,5 +1,9 @@
 # CrossPoint Simulator
 
+> **This is the ExplorInk fork.** `main` tracks upstream; development happens on
+> the `explorink` branch. See [EXPLORINK.md](EXPLORINK.md) for what the fork
+> changes and why, and [FORKING.md](FORKING.md) for the rule it follows.
+
 A desktop simulator for [CrossPoint](https://github.com/crosspoint-reader/crosspoint-reader)-based firmware. Compiles the firmware natively and renders the e-ink display in an SDL2 window. No device required. Can be used with forks of Crosspoint but any new methods added to the firmware will need to be stubbed. If your fork diverges from the CrossPoint HAL, see [FORKING.md](FORKING.md).
 
 > [!NOTE]
