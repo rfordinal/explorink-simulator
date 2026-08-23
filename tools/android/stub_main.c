@@ -13,8 +13,13 @@ int main(int argc, char **argv) {
     SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return 1;
   }
-  SDL_Window *window = SDL_CreateWindow("ExplorInk Simulator", 0, 0, 0, 0,
-                                        SDL_WINDOW_FULLSCREEN);
+  /* No SDL_WINDOW_FULLSCREEN. On Android that flag, not the manifest theme, is
+   * what hides the status bar -- and a white screen with no status bar reads as
+   * a broken phone. The requested size is ignored on Android (the window is
+   * whatever the activity got), so it is just the panel's size for clarity. */
+  SDL_Window *window = SDL_CreateWindow("ExplorInk Simulator",
+                                        SDL_WINDOWPOS_UNDEFINED,
+                                        SDL_WINDOWPOS_UNDEFINED, 480, 800, 0);
   if (!window) {
     SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
     return 1;

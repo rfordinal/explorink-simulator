@@ -12,15 +12,15 @@
         android:allowBackup="false"
         android:hardwareAccelerated="true">
 
+        <!-- Theme is NoTitleBar, not NoTitleBar.Fullscreen. A white screen with
+             no status bar reads as a broken phone, and the panel is 480x800
+             anyway: it gets letterboxed with room for on-screen buttons. -->
         <activity
             android:name=".SimulatorActivity"
             android:exported="true"
             android:label="ExplorInk Simulator"
             android:screenOrientation="portrait"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
-            <!-- Not Fullscreen. A white screen with no status bar reads as a
-                 broken phone, and the panel is 480x800 anyway: it gets letterboxed
-                 with room for on-screen buttons, not stretched edge to edge. -->
             android:theme="@android:style/Theme.NoTitleBar"
             android:preferMinimalPostProcessing="true">
             <intent-filter>

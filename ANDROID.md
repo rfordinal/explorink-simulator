@@ -88,6 +88,22 @@ llvm-readelf -l /tmp/x.so | grep LOAD          # align must be 0x4000
 zipalign -c -P 16 -v 4 app-debug.apk | tail -1 # "Verification successful"
 ```
 
+### SDL decides fullscreen, not the manifest
+
+`SDL_WINDOW_FULLSCREEN` in the `SDL_CreateWindow` call is what hides the status
+bar on Android. Changing the activity's theme away from
+`Theme.NoTitleBar.Fullscreen` does nothing while that flag is set. Verified
+both ways on the phone.
+
+It matters beyond looks: a white screen with a moving dark stripe and no system
+bars reads as a dead phone, not as a running app. The stub now asks for a plain
+window (`tools/android/stub_main.c`), and the panel will be letterboxed inside
+it rather than stretched.
+
+The requested window size is ignored on Android -- the window is whatever the
+activity got, 720x1560 here -- so the 480x800 in that call is documentation, not
+a request.
+
 ### Java cannot set an environment variable before the native code loads
 
 The obvious way to point the firmware at its simulated SD card is
