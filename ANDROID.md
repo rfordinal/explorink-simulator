@@ -172,6 +172,15 @@ The requested window size is ignored on Android -- the window is whatever the
 activity got, 720x1560 here -- so the 480x800 in that call is documentation, not
 a request.
 
+### `set -o pipefail` and a grep that matches nothing
+
+`provision_sd.sh` filters one expected error out of tar's stderr. Written as a
+pipeline, `... | grep -v expected`, it killed the script **exactly when there
+was nothing to report**: pipefail reports a grep that matched nothing as a
+failure. The filtering happens on a captured string instead.
+
+Worth remembering for any script here that greps away an expected warning.
+
 ### Java cannot set an environment variable before the native code loads
 
 The obvious way to point the firmware at its simulated SD card is

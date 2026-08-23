@@ -16,6 +16,14 @@
 
 #include "WString.h"
 
+// One sequence per object: begin(), then add() as often as needed, then
+// calculate() once. calculate() finalises the state, so calling it twice, or
+// add()ing after it, returns a digest of the wrong thing rather than failing.
+// That is not an Android quirk -- OpenSSL's MD5_Final and CommonCrypto's
+// CC_MD5_Final behave the same way, so the two other variants of this class
+// have the identical contract, and a guard here would make Android the odd one
+// out. Both callers (KOReaderDocumentId.cpp, KOReaderCredentialStore.cpp) use
+// the sequence once.
 class MD5Builder {
 public:
   MD5Builder() { begin(); }

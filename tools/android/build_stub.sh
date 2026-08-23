@@ -14,6 +14,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 jni_libs="$repo_root/android/app/src/main/jniLibs/$ABI"
 
 [ -f "$jni_libs/libSDL2.so" ] || { echo "run tools/android/fetch_sdl2.sh first" >&2; exit 1; }
+[ -f "$SRC/include/SDL.h" ] || { echo "no SDL2 headers at $SRC -- run tools/android/fetch_sdl2.sh" >&2; exit 1; }
+[ -f "$repo_root/tools/android/stub_main.c" ] || { echo "missing $repo_root/tools/android/stub_main.c" >&2; exit 1; }
+[ -x "$CC" ] || { echo "no NDK compiler at $CC (set ANDROID_NDK_HOME)" >&2; exit 1; }
 
 # -z max-page-size=16384: Android 15+ rejects 4 kB-aligned LOAD segments.
 "$CC" -shared -fPIC -O2 \
