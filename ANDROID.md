@@ -154,8 +154,13 @@ still works and goes through the same path.
 
 `ONE_TO_ONE` being smaller than `REAL` is the point of having both: a phone is
 denser than the reader, so pixel-perfect and life-size are different pictures.
-`REAL` is only as honest as the phone's reported density, and some phones round
-it.
+
+**`REAL` is honest, checked the only way it can be:** all three phones in
+`REAL` at once, held together, show the panel at the same physical size. Three
+different screen densities agreeing means each one reports `xdpi`/`ydpi`
+truthfully and the arithmetic is right. Confirmed by the maintainer by eye,
+2026-08-23. A phone that rounded its density badly would show up immediately as
+a panel that does not match the others.
 
 All three are the size of the SDL surface in the Android layout, nothing more.
 The renderer keeps its 480x800 logical size and SDL maps it, so no firmware or
