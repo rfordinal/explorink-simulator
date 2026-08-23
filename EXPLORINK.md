@@ -62,6 +62,8 @@ upstream will take, the second one never leaves this fork.
 | `src/Arduino.h` | `pinMode` / `digitalWrite` / `analogRead` plus `LOW`, `HIGH`, `INPUT`, `OUTPUT`, `INPUT_PULLUP`, `INPUT_PULLDOWN`. FreeInk's `BoardConfig.h` powers the SD rail up and down with these, so any firmware that includes the SDK's own `BoardConfig` instead of the simulator's reduced one fails to compile without them. |
 | `src/Print.h` | The rest of Arduino's `Print` surface: `print`/`println` for `char` and every integer and float width, and a real `printf`. Upstream had `print(const char*)`, `println(const char*)`, and a `println(int)` that printed the literal `"1"`. |
 | `src/HardwareSerial.h` | `HWCDC::availableForWrite()`, returning 1024. Firmware that chunks a long reply against it (ExplorInk's `writeAllChunked`, for the 48,000-byte `CMD:SCREENSHOT` dump) otherwise stalls until its own timeout. |
+| `src/freertos/{FreeRTOS,semphr,task}.h` | A real binary semaphore (`xSemaphoreCreateBinary`), an `xSemaphoreTake` that honours `ticksToWait` and returns `pdFALSE` on timeout, a `vTaskDelay` that sleeps, and `pdMS_TO_TICKS`. The mutex path is untouched: `SemaphoreHandle_t` is now a tagged handle with two arms, because the renderer depends on the recursive mutex and on `xSemaphoreGetMutexHolder` reading its internals. Any firmware waiting on a semaphore with a timeout otherwise never times out, and a retry loop of 40 x 25 ms runs in zero time. `docs/freertos-shim.md`. |
+| `src/NimBLE*.h/.cpp`, `src/SimBle*.{h,cpp}`, `src/host/ble_gap.h`, `docs/ble-shim.md`, `tests/` | A NimBLE peripheral shim: the API surface a firmware BLE server uses, a GATT model dispatching on its own host thread, and a socket transport speaking newline-delimited JSON, so a client on a socket plays the central. No NimBLE source is compiled. Callbacks never run inline, an indication confirm is out of band and withholdable, a second `indicate()` clobbers the first, and the client sets the MTU -- the four things a polite fake gets wrong. Off unless `CROSSPOINT_SIM_BLE_PORT` is set. |
 
 ### HAL surface — stays in the fork
 
@@ -90,5 +92,4 @@ simply reports "Bluetooth failed to start".
   simulator. That is where a synthetic GPS fix would come from. Until it is
   wired to stdin, seed `fs_/.crosspoint/settings.json` with `mapHasLastFix`,
   `mapLastLatE7` and `mapLastLonE7` instead.
-- **No BLE.** Nothing stands in for NimBLE, so nothing exercises the position
-  server, the tile push or the wallet transfer.
+
