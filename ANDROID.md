@@ -307,7 +307,15 @@ repo is the same translation against BlueZ and was the reference.
 
 It starts by itself when `CROSSPOINT_SIM_BLE_PORT` is set, and retries until the
 shim is listening -- which is when the map screen opens, not at boot. A status
-line under the top bar says where it is.
+token in the top bar says what it is: a filled dot for a central on the link, a
+hollow one for advertising and waiting, a dash for attached to the simulator with
+no radio up yet.
+
+**That token is driven by state, not by the last log message**, and the
+distinction was a bug first. Matching on messages meant the firmware's "asked
+for new conn params" a few seconds after every connect -- which is not a state
+at all -- knocked the indicator back to unknown while a central was plainly
+connected. The bridge now reports transitions and logs separately.
 
 From the first run's log: four characteristics built from the shim's own `gatt`
 event (props 8, 56, 8, 32), the service UUID advertised, a central connected,
