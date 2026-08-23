@@ -44,9 +44,14 @@ public class SimulatorActivity extends SDLActivity
 
     /**
      * Panel geometry. Must track the simulator's compiled device profile: the
-     * only wired env is X4, 480x800 at 220 PPI (parent repo README.md:130,
-     * EInkDisplay.h DISPLAY_WIDTH/HEIGHT). Wrong numbers only make "real size"
-     * wrong; the other two modes do not use them.
+     * only wired env is X4, 480x800 at 220 PPI (parent repo README.md:137,
+     * EInkDisplay.h DISPLAY_WIDTH/HEIGHT).
+     *
+     * The 220 is the vendor's nominal figure and nobody has measured the panel
+     * (parent docs/wallet-plan.md:103 marks it OPEN). REAL mode is therefore
+     * accurate to whatever that figure is worth, and three phones agreeing with
+     * each other cannot tell you: a wrong figure makes all of them wrong by the
+     * same factor. The other two modes do not use it at all.
      */
     private static final int PANEL_W = 480;
     private static final int PANEL_H = 800;

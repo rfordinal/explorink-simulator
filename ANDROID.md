@@ -54,6 +54,12 @@ adb shell am start -n org.explorink.simulator/.SimulatorActivity
 `provision_sd.sh` needs the app installed first: it writes through `run-as`,
 which only works on a debuggable build.
 
+**What its check does not catch.** It compares the file count and the total byte
+size, which catches a missing file and a truncated one -- and a truncated file is
+what a half-finished transfer produces. It does not catch a corrupted one: same
+length, wrong content passes. A checksum per file over `adb` for 1318 files was
+judged too slow to be worth it.
+
 Input works with no on-screen buttons yet -- `adb shell input keyevent`
 reaches SDL through `SDLActivity`, so `66` (ENTER) is the confirm button.
 Scancode map: ESCAPE back, RETURN confirm, arrows, P power, S sleep, H home
@@ -166,17 +172,29 @@ a size it does not have.
 |---|---|
 | `FIT` | the panel fills the space available. SDL letterboxes, so the aspect is right and the pixels are scaled. |
 | `ONE_TO_ONE` | one panel pixel to one screen pixel, 480x800. On a dense phone this is physically **smaller** than the real device. |
-| `REAL` | the panel's physical size: 480x800 at 220 PPI is 55x92 mm (parent repo `README.md:130`). Scaled by the screen's own `xdpi`/`ydpi`. |
+| `REAL` | the panel's physical size: 480x800 at 220 PPI is 55x92 mm (parent repo `README.md:137` -- vendor nominal, unmeasured, see below). Scaled by the screen's own `xdpi`/`ydpi`. |
 
 `ONE_TO_ONE` being smaller than `REAL` is the point of having both: a phone is
 denser than the reader, so pixel-perfect and life-size are different pictures.
 
-**`REAL` is honest, checked the only way it can be:** all three phones in
-`REAL` at once, held together, show the panel at the same physical size. Three
-different screen densities agreeing means each one reports `xdpi`/`ydpi`
-truthfully and the arithmetic is right. Confirmed by the maintainer by eye,
-2026-08-23. A phone that rounded its density badly would show up immediately as
-a panel that does not match the others.
+**`REAL` is self-consistent, which is less than honest.** All three phones in
+`REAL` at once, held together, show the panel at the same physical size, and
+that is worth having: three different screen densities agreeing means each
+reports `xdpi`/`ydpi` truthfully and the arithmetic is right. Confirmed by the
+maintainer by eye, 2026-08-23. A phone that rounded its density badly would show
+up immediately as a panel that does not match the others.
+
+**It cannot check the panel figure, and that figure is not measured.** 220 PPI is
+the vendor's nominal number and nothing in this project has measured the X4's
+active area (parent repo `docs/IDEAS.md:294`; `docs/wallet-plan.md:103` marks it
+`OPEN`). If it is wrong, all three phones are wrong by the same factor and agree
+perfectly -- so this check structurally cannot catch it. The repo's own numbers
+already disagree by 1.4%: 480x800 at 220 PPI is a 4.24 inch diagonal, while
+`README.md:137` says 4.3 inch, which would be 217 PPI and 56.2 x 93.6 mm instead
+of 55.4 x 92.4.
+
+**Open -- needs a caliper on an X4's active area.** No device exists to measure
+(parent `docs/PROGRESS.md`, 2026-08-22).
 
 All three are the size of the SDL surface in the Android layout, nothing more.
 The renderer keeps its 480x800 logical size and SDL maps it, so no firmware or
@@ -320,7 +338,8 @@ itself is a decision the test stops testing. `tools/blebridge.py` in the parent
 repo is the same translation against BlueZ and was the reference.
 
 It starts by itself when `CROSSPOINT_SIM_BLE_PORT` is set, and retries until the
-shim is listening -- which is when the map screen opens, not at boot. A status
+shim is listening -- which is when a screen that needs BLE opens, the map or
+Sync, not at boot. A status
 token in the top bar says what it is: a filled dot for a central on the link, a
 hollow one for advertising and waiting, a dash for attached to the simulator with
 no radio up yet.
@@ -415,9 +434,13 @@ and runs there. Verified 2026-08-23 on a Galaxy S10 (Android 12):
 - 213 of 213 translation units compile and link, including the shim's four files
   and the firmware's own `BlePositionServer.cpp`. `libmain.so` grows from 18.2 to
   18.5 MB.
-- The shim's listener comes up on `127.0.0.1:8765` **when the map screen opens**,
-  not at boot -- the firmware starts BLE with `MapActivity`. Checked in
-  `/proc/net/tcp` (`0100007F:223D`, state 0A).
+- The shim's listener comes up on `127.0.0.1:8765` **when the map or the Sync
+  screen opens**, not at boot: those are the two places the firmware starts BLE
+  (`MapActivity.cpp:1829`, `TileSyncActivity.cpp:106`). Checked in
+  `/proc/net/tcp` (`0100007F:223D`, state 0A). Only the map was found at first,
+  by a grep whose pattern could not match the actual call
+  (`BlePositionServer::getInstance().begin()`); an empty grep is not a list of
+  one.
 - `adb forward tcp:8765 tcp:8765` makes that socket reachable from the laptop, so
   **the existing laptop tools work against the phone unchanged**:
   `python3 tools/blepos.py 48.3810 17.5930 --heading 4 --speed 42 --sim
