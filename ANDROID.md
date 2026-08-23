@@ -297,6 +297,21 @@ and runs there. Verified 2026-08-23 on a Galaxy S10 (Android 12):
   127.0.0.1:8765` moved the map, turned the compass and put the packet's clock in
   the header.
 
+The header's Bluetooth indicator tracks it live: the `X` over the bars means
+`connIntervalMs() == 0`, no central connected
+(`firmware/explorink/docs/map-header-status.md`). A one-shot tool disconnects
+when it exits, so a screenshot taken afterwards correctly shows the `X` again --
+worth knowing before reading it as a failure. With a client holding the link
+open, the bars replace it.
+
+**One client at a time, and a killed client costs the next one.** The shim
+refuses a second client (`docs/ble-shim.md`, "The second client is refused").
+A tool killed mid-run left its socket behind for long enough that the next
+attempt died on `ConnectionResetError: Connection lost` at its first write --
+which reads like a firmware or transport fault and is neither. Check
+`/proc/net/tcp` for a live connection to the port before blaming anything else.
+That matters for the Android bridge, which will be that single client.
+
 So the firmware's real BLE code runs on the phone. What is missing for
 [plan A](../../docs/ble-bridge.md) -- a phone advertising for real, with the
 companion app on a second phone as the central -- is only the bridge between the
