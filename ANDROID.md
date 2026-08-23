@@ -73,6 +73,9 @@ bottom. Confirmed by eye and by `adb exec-out screencap`.
 | Samsung SM-G973F (S10) | 12 | 31 |
 | Samsung SM-G950F (S8) | 9 | 28 |
 
+The BLE bridge is verified on the S10 and the S8 as peripherals, with the S24 as
+the central.
+
 All arm64-v8a. Three API levels from 28 to 36 off one APK. The older phones are
 more than spares: they are the real test of `minSdk 24` and of SDL's GL path on
 2017 hardware, and one can hold a running simulator without occupying the main
@@ -295,9 +298,20 @@ it could do, the native side can do without an ordering problem.
 
 ## Real Bluetooth, phone to phone
 
-**Verified 2026-08-23.** The companion app on a Galaxy S24 Ultra connected over
-actual Bluetooth to the simulator on a Galaxy S10, and the firmware took the
-phone's real GPS fix and redrew the map. No laptop in the path.
+**Verified 2026-08-23** on two peripherals, an S10 (Android 12) and an S8
+(Android 9). The companion app on a Galaxy S24 Ultra connected to each over
+actual Bluetooth, and the firmware took the phone's real GPS fix and redrew the
+map. No laptop in the path.
+
+Android 9 needed no code change and no runtime prompt: `BLUETOOTH` and
+`BLUETOOTH_ADMIN` are install-time permissions there, and the runtime request is
+guarded to API 31 and up. Full negotiation either way -- CCCD writes on both
+indicate characteristics and MTU 517 on the 2017 phone as much as on the 2024
+one.
+
+Worth seeing side by side: the S8 reports 281 dpi and the S10 416, because the
+S8 is running a downscaled display mode. Real size draws the panel at 55x92 mm
+on both, which is the whole point of the mode.
 
 `BleBridge.java` is the bridge: a socket client on the shim's loopback port on
 one side, an Android `BluetoothGattServer` and `BluetoothLeAdvertiser` on the
