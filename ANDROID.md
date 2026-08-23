@@ -45,10 +45,19 @@ adb shell am start -n org.explorink.simulator/.SimulatorActivity
 
 ## Verified 2026-08-23
 
-Samsung SM-S928B, Android 16 (API 36), arm64-v8a, NDK r27.3.13750724,
-SDL2 2.32.10. The smoke test installs, launches and draws: white screen, one
-dark stripe scrolling top to bottom, fullscreen at 720x1560. Confirmed on the
-phone by eye and by `adb exec-out screencap`.
+NDK r27.3.13750724, SDL2 2.32.10, one APK, both phones. The smoke test
+installs, launches and draws: white screen, one dark stripe scrolling top to
+bottom. Confirmed by eye and by `adb exec-out screencap`.
+
+| phone | Android | API | renderer |
+|---|---|---|---|
+| Samsung SM-S928B (S24 Ultra) | 16 | 36 | 720x1560 |
+| Samsung SM-G950F (S8) | 9 | 28 | 720x1336 |
+
+Both arm64-v8a. The S8 matters as more than a spare: it is a real test of
+`minSdk 24` and of SDL's GL path on 2017 hardware, and it can hold a running
+simulator without occupying the main phone. With two devices attached, every
+`adb` call needs `-s <serial>` or `ANDROID_SERIAL`.
 
 What that pass establishes:
 
@@ -65,10 +74,17 @@ What that pass establishes:
 
 ### 16 kB page alignment is mandatory, and the warning lies about being current
 
-Android 15 and newer run on 16 kB memory pages and refuse a `.so` whose ELF
-`LOAD` segments are aligned to the old 4 kB. The app still starts, but the
-system puts a dialog over it: *"not compatible with 16 kB mode ... segment LOAD
-is not aligned"*.
+Android 15 and newer refuse a `.so` whose ELF `LOAD` segments are aligned to
+4 kB. The app still starts, but the system puts a dialog over it: *"not
+compatible with 16 kB mode ... segment LOAD is not aligned"*.
+
+**The phone doing the complaining need not have 16 kB pages itself.** The S24
+here reports `getconf PAGE_SIZE` = 4096 and still warns: the check is about
+whether the app *could* run on a 16 kB device, not about the current one. So
+there is no "this hardware is fine" exemption to lean on.
+
+Older Android does not check at all -- the Galaxy S8 on Android 9 runs a
+4 kB-aligned build with no dialog.
 
 Two different alignments have to be right, and they are fixed in two places:
 
