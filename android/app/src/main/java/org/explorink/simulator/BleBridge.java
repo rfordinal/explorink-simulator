@@ -94,6 +94,13 @@ final class BleBridge {
     private BluetoothDevice peer;
     private int mtu;
     /**
+     * Whether this server has started advertising yet. A central that turns up
+     * before it has is not answering our advertisement: it is an ACL link that
+     * outlived the previous process, and its GATT state is gone. See
+     * dropStaleLink().
+     */
+    private boolean advertising;
+    /**
      * Which characteristic the outstanding indication belongs to.
      * onNotificationSent does not say, and guessing from the subscription set
      * would send a confirm for a characteristic that was never indicated.
@@ -377,6 +384,7 @@ final class BleBridge {
         advertiseCallback = new AdvertiseCallback() {
             @Override
             public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+                advertising = true;
                 status("advertising " + serviceUuid + " -- the phone can connect");
             }
 
@@ -413,12 +421,42 @@ final class BleBridge {
         }
         server = null;
         peer = null;
+        advertising = false;
         mtu = 0;
         awaitingConfirm = null;
         chars.clear();
         props.clear();
         lastValue.clear();
         cccd.clear();
+    }
+
+    /**
+     * Killing the app does not drop the Bluetooth link. Both stacks keep the ACL
+     * connection alive, so the next GATT server opened on this side is handed
+     * the existing central immediately -- before advertising has even started,
+     * which is the tell. Observed 2026-08-23: the same peer address came back
+     * one millisecond before onStartSuccess, with no CCCD write and no MTU
+     * exchange, leaving the firmware believing a central was connected while
+     * that central believed it was still subscribed to a GATT table that no
+     * longer existed. Indications would have gone nowhere.
+     *
+     * So a link that predates our advertising is dropped, which makes the peer
+     * reconnect and renegotiate properly. Returns true when the link was
+     * dropped and nothing should be forwarded for it.
+     */
+    @SuppressLint("MissingPermission")
+    private boolean dropStaleLink(BluetoothDevice device) {
+        if (advertising || server == null) {
+            return false;
+        }
+        status("dropping a link left over from a previous run: "
+                + safeAddress(device));
+        try {
+            server.cancelConnection(device);
+        } catch (Exception e) {
+            Log.w(TAG, "could not drop the stale link", e);
+        }
+        return true;
     }
 
     @SuppressLint("MissingPermission")
@@ -445,6 +483,9 @@ final class BleBridge {
         @Override
         public void onConnectionStateChange(BluetoothDevice device, int st, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                if (dropStaleLink(device)) {
+                    return;
+                }
                 peer = device;
                 mtu = 23;
                 // The negotiated MTU is not knowable yet, so open with the

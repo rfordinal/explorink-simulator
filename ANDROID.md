@@ -335,6 +335,39 @@ Android also does not tell `onNotificationSent` which characteristic it belongs
 to. The bridge records the one it indicated rather than guessing from the
 subscription set, which would confirm a characteristic that was never sent.
 
+### Killing the app does not drop the link, and the peer does not notice
+
+Tested 2026-08-23, deliberately: the simulator was `force-stop`ped mid-link, so
+no teardown of ours ran.
+
+**Both Bluetooth stacks kept the ACL connection.** The next GATT server this side
+opened was handed the existing central immediately -- one millisecond *before*
+`onStartSuccess`, same peer address, and with no CCCD write and no MTU exchange.
+That left the firmware believing a central was connected while that central
+believed it was subscribed to a GATT table that no longer existed. Indications
+would have gone nowhere.
+
+Fixed here: a central that arrives before this server has started advertising is
+not answering our advertisement, so `dropStaleLink()` drops it. Verified --
+`dropping a link left over from a previous run` in the log, then a clean
+advertisement.
+
+**The peer is still wedged, and that is not fixable from this side.** The
+companion app's own on-screen log, four minutes after the kill and after our
+drop: still `connected to Galaxy S10`, no disconnect line, `last sent 20:46:22`.
+`BluetoothGattServer.cancelConnection` releases this server's reference and does
+not tear the ACL down while the other side holds it.
+
+The parent repo's `docs/ble-bridge.md` left exactly this open -- "whether a clean
+GATT disconnect from the BlueZ side is enough, or the app also needs a fix for a
+peer that vanishes". It is not enough. The app needs to notice a peer that stops
+answering, which is app-side work.
+
+Incidentally, this is also what finally proved which device was connecting. The
+peer's address is a rotating random one and says nothing; the app's own log says
+`found: Galaxy S10` and `connected: Galaxy S10`, matching the scan response's
+device name.
+
 ### Two rules for running it
 
 - **Different phones.** One runs the simulator as the peripheral, another the
