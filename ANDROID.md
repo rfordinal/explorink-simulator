@@ -498,6 +498,17 @@ peer's timing is never measured. And the test devices have to be **different
 phones**: one runs the simulator as the peripheral, another runs the companion
 app as the central.
 
+### The laptop can be the central directly, no bridge needed
+
+The shim/`adb forward` path above is one way to reach it; it is not the
+only one. With `CROSSPOINT_SIM_BLE_PORT` unset (the default), the app runs
+real NimBLE, so a laptop's own Bluetooth adapter finds it as a normal BLE
+peripheral -- confirmed 2026-08-24, `python3 tools/mapcmd.py --ble <cmd>`
+(bleak) against `org.explorink.simulator` on a Samsung S10, full round trip
+on `zoom`/`mode`/`pos`/`info`. "What is missing for plan A" above is about
+phone-to-phone (a second phone as central); a laptop already has its own
+BLE central and never needed the bridge.
+
 ### Every `CROSSPOINT_SIM_*` knob now works on Android
 
 The shim is off unless `CROSSPOINT_SIM_BLE_PORT` is set, and on Android nothing
