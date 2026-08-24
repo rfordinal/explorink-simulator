@@ -230,7 +230,31 @@ process. Two details:
 Verified on a phone: pressing Sleep then Select changes the process id and comes
 back to Home, instead of the app vanishing.
 
-## Two Android facts that cost time
+## Three Android facts that cost time
+
+### `HWCDC`'s stderr never reaches `adb logcat`, and nothing says so
+
+The desktop simulator's `Serial`/`logSerial` is `HWCDC`, backed by
+`std::cerr` (`src/HardwareSerial.h`). That is a real terminal on a laptop.
+On Android it is a Zygote-forked app process with no terminal at all, and
+nothing redirects its fd 2 into the pipe `logcat` reads -- so every
+`LOG_ERR`/`LOG_INF`/`LOG_DBG` line the firmware ever prints simply
+disappears. No error, no truncation warning, nothing: the code path runs,
+the write call returns, and the byte are gone.
+
+Confirmed 2026-08-24 chasing a real firmware bug (pin save failing with
+"Card refused the write" on an S8): the `PINS`/`PINLOG` `LOG_ERR` lines
+that had to be firing were never once seen in `logcat`, across several
+reproductions, while an unrelated Java-side `SDL_Log` call showed up fine
+under the `SDL/APP` tag in the same window. That contrast is what gave it
+away -- some things from this process do reach logcat, just not stderr.
+
+Fixed by also routing `HWCDC::write()`/`printf()` through
+`__android_log_print` (tag `explorink`) when `__ANDROID__` is defined,
+buffered to whole lines since firmware writes are not always
+newline-terminated per call. `liblog` is already linked (this file's
+Milestone 1 `NEEDED` list). `adb logcat -s explorink:*` now shows every
+firmware log line live. Desktop `std::cerr` output is unchanged.
 
 ### 16 kB page alignment is mandatory, and the warning lies about being current
 

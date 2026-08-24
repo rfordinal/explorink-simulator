@@ -1,21 +1,28 @@
 #pragma once
 #include <cstdio>
+#include <cstring>
 #include <iostream>
+#include <string>
 
 #include "Arduino.h"
 #include "Print.h"
 #include "Stream.h"
 #include "WString.h"
+
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
+
 class HWCDC : public Stream {
 public:
   void begin(unsigned long baud) {}
   void setTxTimeoutMs(uint32_t timeoutMs) {}
   size_t write(uint8_t c) override {
-    std::cerr << (char)c;
+    emit(reinterpret_cast<const char *>(&c), 1);
     return 1;
   }
   size_t write(const uint8_t *buffer, size_t size) override {
-    std::cerr.write((const char *)buffer, size);
+    emit(reinterpret_cast<const char *>(buffer), size);
     return size;
   }
   int available() override { return 0; }
@@ -27,14 +34,42 @@ public:
   int peek() override { return -1; }
   template <typename... Args> void printf(const char *format, Args... args) {
     if constexpr (sizeof...(Args) == 0) {
-      std::cerr << format;
+      emit(format, strlen(format));
     } else {
       char buf[256];
-      snprintf(buf, sizeof(buf), format, args...);
-      std::cerr << buf;
+      const int len = snprintf(buf, sizeof(buf), format, args...);
+      if (len > 0) emit(buf, static_cast<size_t>(len));
     }
   }
   operator bool() const { return true; }
+
+private:
+  // stderr from a native .so on Android never reaches `adb logcat` -- the
+  // Zygote-forked app process has no terminal, and nothing redirects its fd 2
+  // into the pipe logcat reads (confirmed 2026-08-24: LOG_ERR lines that must
+  // have fired -- PinLog::append() only ever succeeded for one catalogue key
+  // on a test device -- left zero trace, while an unrelated SDL_Log line from
+  // Java-side code showed up fine under the "SDL/APP" tag). So route the same
+  // bytes through __android_log_print too, buffered to whole lines because
+  // logPrintf() writes one line per call but callers are free to write() a
+  // single byte at a time (Stream's default multi-byte write loops one byte
+  // per call).
+#if defined(__ANDROID__)
+  std::string androidLineBuf_;
+#endif
+  void emit(const char *data, size_t size) {
+    std::cerr.write(data, static_cast<std::streamsize>(size));
+#if defined(__ANDROID__)
+    for (size_t i = 0; i < size; ++i) {
+      if (data[i] == '\n') {
+        __android_log_print(ANDROID_LOG_INFO, "explorink", "%s", androidLineBuf_.c_str());
+        androidLineBuf_.clear();
+      } else {
+        androidLineBuf_ += data[i];
+      }
+    }
+#endif
+  }
 };
 
 // CrossPoint uses HardwareSerial when ARDUINO_USB_CDC_ON_BOOT is not defined.
