@@ -9,7 +9,19 @@
 #   tools/android/provision_sd.sh <cdn-dir> [serial]
 #
 # <cdn-dir> is a tile mirror with base/ and points/ subdirectories -- the parent
-# repo's mapbuilder/cdn.
+# repo's mapbuilder/cdn, or a scratch root built with build_tiles.py --out.
+#
+# SIM_KEEP=1 merges into whatever tiles are already on the phone instead of
+# replacing base/ and points/. Off by default: a merge leaves two areas on the
+# card and the verification below then fails on the file count.
+#
+# SIM_LAT / SIM_LON override the persisted fix, in degrees:
+#
+#   SIM_LAT=50.074722 SIM_LON=14.502278 tools/android/provision_sd.sh <dir>
+#
+# Needed whenever the tiles are not Slovak: the default below is Trnava, and a
+# fix outside the tile root draws an empty panel. The parent repo's reference
+# views (docs/visual-refs.json) are the coordinates worth passing here.
 set -euo pipefail
 
 PKG=org.explorink.simulator
@@ -20,10 +32,14 @@ ADB=(adb)
 
 [ -d "$CDN/base" ] || { echo "no $CDN/base" >&2; exit 1; }
 
-# Trnava. Deliberately not the maintainer's own area: a rendered map identifies
-# a location precisely, and these screenshots leave the phone.
-LAT_E7=483770000
-LON_E7=175880000
+# Trnava by default. Deliberately not the maintainer's own area: a rendered map
+# identifies a location precisely, and these screenshots leave the phone. That
+# reasoning applies to whatever SIM_LAT/SIM_LON are set to as well -- picking a
+# fix is picking what a screenshot discloses.
+LAT_E7=${SIM_LAT:+$(printf '%.0f' "$(echo "${SIM_LAT} * 10000000" | bc -l)")}
+LON_E7=${SIM_LON:+$(printf '%.0f' "$(echo "${SIM_LON} * 10000000" | bc -l)")}
+LAT_E7=${LAT_E7:-483770000}
+LON_E7=${LON_E7:-175880000}
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -60,6 +76,17 @@ extract() {
 # "points/...". An earlier version renamed a "cdn" prefix with tar's
 # --transform, which broke on any directory name containing a sed metacharacter
 # and needed GNU tar; this needs neither.
+# base/ and points/ are REPLACED, not merged into. Extracting on top of an
+# earlier tile set leaves the phone holding the union of two areas, and then
+# this script's own verification fails on the file count -- which is what
+# happened the first time a second area was pushed. Only those two trees go:
+# the firmware writes its own files under trailink/ while running (power.csv,
+# from PowerTelemetry) and those are not ours to delete. SIM_KEEP=1 skips it.
+if [ -z "${SIM_KEEP:-}" ]; then
+  echo "clearing base/ and points/ on the phone"
+  "${ADB[@]}" shell "run-as $PKG sh -c 'rm -rf files/fs_/trailink/base files/fs_/trailink/points'" >/dev/null
+fi
+
 echo "pushing tiles from $CDN"
 tar -cf - -C "$CDN" base points | extract files/fs_/trailink
 
