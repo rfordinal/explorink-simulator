@@ -509,6 +509,46 @@ on `zoom`/`mode`/`pos`/`info`. "What is missing for plan A" above is about
 phone-to-phone (a second phone as central); a laptop already has its own
 BLE central and never needed the bridge.
 
+**Confirmed on the S10, not on the S8.** Tested 2026-08-26 against a Galaxy
+S8 (Android 9): `CROSSPOINT_SIM_BLE_PORT` unset, Map screen open,
+`BlePositionServer.begin()` and its own "switched to slow interval" log both
+ran normally, but nothing reached the air. `dumpsys bluetooth_manager` on the
+S8 confirmed it -- `[App AdvInfo]` for `org.explorink.simulator` never gained a
+new entry across five app relaunches, an explicit `svc bluetooth
+disable`/`enable`, and a full phone reboot; `mAdvertisingServiceUuids` stayed
+empty throughout. A laptop `BleakScanner.discover()` never saw the S8's public
+MAC or the service UUID, on any of those attempts, while the identical script
+found the S10 immediately both times it was tried.
+
+**No code path explains why it should have worked at all.** `grep -rl
+"BluetoothLeAdvertiser\|BluetoothGattServer\|android/bluetooth" src/`
+in this repo returns nothing -- the only Android code that ever calls into
+`BluetoothLeAdvertiser`/`BluetoothGattServer` is `BleBridge.java`
+(`android/app/src/main/java/org/explorink/simulator/BleBridge.java`), and
+`SimulatorActivity.startBridgeIfConfigured()` only constructs it when
+`SimEnv.blePort(this) != 0` -- i.e. only in shim mode. There is no JNI call
+into the Bluetooth framework anywhere else in this tree. So "the app runs real
+NimBLE" with the port unset cannot itself reach a real radio on *any* phone;
+what actually made the S10 test above pass is open -- possibly a leftover
+`sim-env` file from an earlier shim-mode run that `SimEnv` picked up unnoticed,
+possibly something else. Not re-verified as part of this finding. Whatever it
+was, it did not reproduce on the S8.
+
+**What is confirmed to work on the S8: shim mode, same as the phone-to-phone
+section above.** `tools/android/set_env.sh CROSSPOINT_SIM_BLE_PORT=8765
+--serial <S8>`, reopen the Map screen, the header's `BLE` chrome badge shows a
+hollow circle (advertising, waiting) exactly as documented above. From there a
+laptop tool talking to the *bridge's* advertisement -- not a bare NimBLE one --
+connects normally: `tools/blepos.py` found and updated the S8's position, and
+`tools/blefakephone.py --source cdn` completed a full `NEED_TILES` round trip
+against it -- 4 tiles fetched from the real CDN and pushed over BLE (`pushed
+base/12/2245/1421.tib (12912 bytes): OK 12912 7d975f17`, and three more), then
+a `CHECK_TILES` freshness ask on the same connection. So the full BLE path --
+advertise, connect, position, missing-tile autosync, freshness check -- works
+on the S8 exactly as it does on the S10, provided the bridge is running.
+**If a phone will not advertise with the port unset, set it and use the
+bridge before concluding BLE itself is broken on that phone.**
+
 ### Every `CROSSPOINT_SIM_*` knob now works on Android
 
 The shim is off unless `CROSSPOINT_SIM_BLE_PORT` is set, and on Android nothing
