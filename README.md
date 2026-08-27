@@ -198,6 +198,50 @@ nowhere.
 
 When the simulator is on the sleep screen, pressing any mapped simulator key wakes it. Under the hood the simulator relaunches itself and reports a synthetic power-button wake, because the native build has no real ESP deep-sleep resume path.
 
+## Window scale
+
+The window is the panel at 1:1 by default: 480x800 device pixels, 480x800 screen
+pixels, nearest sampling, nothing interpolated. `CROSSPOINT_SIM_SCALE` picks one
+of three modes, because they answer different questions:
+
+```bash
+./program                                  # 1:1, the default
+CROSSPOINT_SIM_SCALE=3        ./program    # integer zoom, nearest
+CROSSPOINT_SIM_SCALE=zoom:4   ./program    # the same, spelled out
+CROSSPOINT_SIM_SCALE=real     ./program    # physical size, monitor dpi from SDL
+CROSSPOINT_SIM_SCALE=real:157 ./program    # physical size, monitor dpi stated
+```
+
+| mode | what it is for | sampling |
+| --- | --- | --- |
+| `1:1` | the default, and the only mode a hairline decision may be taken in | nearest |
+| `zoom:N` (2..8) | reading a 12 px label, counting dither dots. One device pixel becomes an NxN block of identical pixels, so a 1 px hairline stays a hard-edged line N wide | nearest |
+| `real` / `real:<dpi>` | "is this road a hairline in the hand". A 480 px panel at 218 ppi is 56 mm wide, so on a ~160 dpi monitor the window is about 0.75x | linear |
+
+Three things worth knowing.
+
+**Nearest, not linear, for 1:1 and zoom.** The window used to set linear filtering
+unconditionally, reasoning that Bayer-dithered pixels average to the right grey at
+scaled sizes. That is true, and wrong for a 1-bit map: a dither has to be judged as
+dots, because dots is what the panel has. Linear at an integer zoom turns a 1 px
+hairline into a grey ramp. Real keeps linear, because its factor is fractional by
+definition and nearest at 0.75x drops rows outright.
+
+**Real size is a resample, and it says so.** The window title and a startup line
+carry the mode and the factor, and real also prints that nothing judged in it
+counts as evidence. `SDL_GetDisplayDPI` supplies the monitor's density when it can
+and the title says `from SDL` or `ASSUMED` -- on X11 and Wayland that call answers
+honestly about as often as it answers 96 flat, so state your own with `real:<dpi>`
+when it matters. The panel's own density is compile-time per device profile: 218
+ppi for the X4 and X4 Pro, 257 for the X3.
+
+**A screenshot is always device pixels.** `CROSSPOINT_SIM_SCREENSHOTS` writes
+480x800 whatever the window is doing -- verified byte-identical across 1:1, zoom
+x3, zoom x4, real and real:157. The capture composes into its own panel-sized
+target rather than reading the window's drawable, which is what it used to do: a
+zoomed window would otherwise have written a filtered, upscaled BMP that still
+looks like a screenshot.
+
 ## Automated QA and screenshots
 
 Two optional environment variables make repeatable navigation and screenshot
