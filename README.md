@@ -13,6 +13,11 @@ the firmware as native code, and new firmware means a new APK. Setup, the two
 build scripts and the Android-specific traps are in
 [ANDROID.md](ANDROID.md).
 
+**A browser build was evaluated, not built.** Real BLE has no browser
+equivalent -- the Web Bluetooth spec has no peripheral/GATT-server role, on
+any browser -- so a WebAssembly port would only ever be a reduced, no-BLE
+demo. [WASM.md](WASM.md).
+
 > [!NOTE]
 > **Platform support:** macOS and Linux/WSL use different native compiler and library flags. Start from `sample-platformio-macos.ini` on macOS, or `sample-platformio-linux-wsl.ini` on Linux/WSL. Native Windows is not supported; use WSL and follow the Linux instructions. Android is a cross-compile rather than a host build and does not use those samples at all; see [ANDROID.md](ANDROID.md).
 
