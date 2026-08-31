@@ -54,9 +54,9 @@ The simulator is a collection of host-side reimplementations of the firmware's h
 ## Device profiles and input mapping
 
 [src/BoardConfig.h](src/BoardConfig.h) selects X4 by default,
-`SIMULATOR_DEVICE_X3` for X3, `SIMULATOR_DEVICE_X4_PRO` for X4 Pro, and
-`SIMULATOR_DEVICE_STICKY` for Seeed Sticky, or
-`SIMULATOR_DEVICE_PAPERMONO` for M5Stack PaperMono.
+`SIMULATOR_DEVICE_X3` for X3, `SIMULATOR_DEVICE_X4_PRO` for X4 Pro,
+`SIMULATOR_DEVICE_STICKY` for Seeed Sticky, `SIMULATOR_DEVICE_PAPERMONO` for
+M5Stack PaperMono, or `SIMULATOR_DEVICE_LILYGO_T5S3` for the LilyGo T5 S3 Pro.
 `SIMULATOR_DISPLAY_UC8179` and `SIMULATOR_DISPLAY_UC8279` select per-batch
 controller revisions without changing a device's geometry or capabilities.
 Keep the reported board and controller aligned with the firmware SDK. X4 Pro
@@ -65,6 +65,13 @@ key, frontlight state, inversion, and an RTC. Sticky also uses 800x480 and adds
 touch, RTC, and tilt without a Home key or frontlight.
 PaperMono uses an 800x480 SSD1677 panel with FT6336-compatible touch, RTC, and
 single-channel frontlight state, without a Home key or tilt.
+LilyGo T5 S3 Pro uses a 960x540 raw-parallel ED047TC1 panel (540x960
+portrait) -- a real resolution difference from every Xteink profile, not just
+a controller swap -- and adds GT911 touch and PWM backlight state, without a
+Home key, RTC, or tilt: those sit behind the board's PCA9535 expander and
+TPS65185 PMIC, which are board-support in the real firmware, not part of
+`BoardConfig`, and stay unmodeled here. It does not accept a
+`SIMULATOR_DISPLAY_*` override.
 
 `HalGPIO::update` owns the SDL event pump for the whole simulator, do not poll SDL events elsewhere. Scancodes map to button indices `BTN_BACK=0` through `BTN_POWER=6`. `SDL_QUIT` sets the `quitRequested` atomic that `HalDisplay::shouldQuit()` reads.
 
