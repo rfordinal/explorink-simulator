@@ -83,6 +83,13 @@ these flags:
   SSD1677 profile. It exposes FT6336-compatible touch and swipe input, the RTC,
   and single-channel frontlight state without a Home key or color-temperature
   control.
+- `-DSIMULATOR_DEVICE_LILYGO_T5S3` switches the framebuffer to 960x540
+  landscape (540x960 portrait), selects the LilyGo T5 S3 Pro board profile,
+  and exposes GT911 touch and PWM backlight state. No Home key, RTC, or tilt
+  -- those live behind the board's PCA9535 expander and are board-support, not
+  modeled by `BoardConfig`. Does not accept a `SIMULATOR_DISPLAY_*` override:
+  the panel is a raw-parallel ED047TC1 driven through LovyanGFX, not one of
+  the Xteink SPI controllers.
 - `-DSIMULATOR_DISPLAY_UC8179` selects the newer UC8179 controller used by
   some X4 and X4 Pro production batches.
 - `-DSIMULATOR_DISPLAY_UC8279` selects UC8279d on X3, or the 800x480 UC8279
@@ -91,7 +98,8 @@ these flags:
 The sample PlatformIO files include ready-to-use environments for the original
 profiles plus `simulator_sticky`, `simulator_x3_uc8279`, `simulator_x4_uc8179`,
 `simulator_x4_uc8279`, `simulator_x4_pro_uc8179`, and
-`simulator_x4_pro_uc8279`, plus `simulator_papermono`. The UC8279 X4 Pro path
+`simulator_x4_pro_uc8279`, plus `simulator_papermono` and
+`simulator_lilygo_t5s3`. The UC8279 X4 Pro path
 mirrors current FreeInk SDK support but remains pending validation on physical
 UC8279 X4 Pro hardware.
 

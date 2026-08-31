@@ -462,6 +462,11 @@ void HalGPIO::begin() {
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
   _deviceType = DeviceType::X4;
   BoardConfig::selectDevice(BoardConfig::Board::XteinkX4Pro);
+#elif defined(SIMULATOR_DEVICE_LILYGO_T5S3)
+  // ESP32-S3, same as X4 Pro/Sticky/PaperMono -- the legacy discriminator
+  // only distinguishes the C3 X3/X4 pair, see isXteinkDevice() below.
+  _deviceType = DeviceType::X4;
+  BoardConfig::selectDevice(BoardConfig::Board::LilyGoT5S3);
 #elif defined(SIMULATOR_DEVICE_X3)
   _deviceType = DeviceType::X3;
 #if defined(SIMULATOR_DISPLAY_UC8279)

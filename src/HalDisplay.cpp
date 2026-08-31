@@ -43,8 +43,13 @@ enum class WindowScaleMode { PixelPerfect, Zoom, Real };
 // GDEQ0426T82), 257 on the X3 -- parent repo docs/device-preview.md, "1:1 and
 // real size", which sources both. Compile-time per device profile rather than a
 // runtime guess, because the binary already knows which panel it is emulating.
+// LilyGo T5 S3 Pro: 4.7" 960x540, diagonal sqrt(960^2+540^2)=1101.4 px /
+// 4.7 in =~ 234.3 ppi -- matches freeink-sdk BoardConfig.h's own "~234 PPI"
+// comment on LILYGO_T5S3's uiScale field.
 #if defined(SIMULATOR_DEVICE_X3)
 static constexpr double DEVICE_PPI = 257.0;
+#elif defined(SIMULATOR_DEVICE_LILYGO_T5S3)
+static constexpr double DEVICE_PPI = 234.0;
 #else
 static constexpr double DEVICE_PPI = 218.0;
 #endif
@@ -482,6 +487,9 @@ static constexpr const char *WINDOW_TITLE =
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
 static constexpr const char *WINDOW_TITLE =
     "Simulator - XTEINK X4 Pro (" SIMULATOR_CONTROLLER_TITLE ")";
+#elif defined(SIMULATOR_DEVICE_LILYGO_T5S3)
+static constexpr const char *WINDOW_TITLE =
+    "Simulator - LilyGo T5 S3 Pro (ED047TC1)";
 #elif defined(SIMULATOR_DEVICE_X3)
 #if defined(SIMULATOR_DISPLAY_UC8279)
 static constexpr const char *WINDOW_TITLE = "Simulator - XTEINK X3 (UC8279d)";

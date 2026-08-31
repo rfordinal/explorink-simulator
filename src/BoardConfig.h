@@ -12,7 +12,8 @@
 
 #if (defined(SIMULATOR_DEVICE_X3) + defined(SIMULATOR_DEVICE_X4_PRO) + \
      defined(SIMULATOR_DEVICE_STICKY) +                               \
-     defined(SIMULATOR_DEVICE_PAPERMONO)) > 1
+     defined(SIMULATOR_DEVICE_PAPERMONO) +                            \
+     defined(SIMULATOR_DEVICE_LILYGO_T5S3)) > 1
 #error "Select at most one simulated device"
 #endif
 
@@ -25,9 +26,10 @@
 #endif
 
 #if (defined(SIMULATOR_DEVICE_STICKY) ||                           \
-     defined(SIMULATOR_DEVICE_PAPERMONO)) &&                      \
+     defined(SIMULATOR_DEVICE_PAPERMONO) ||                       \
+     defined(SIMULATOR_DEVICE_LILYGO_T5S3)) &&                    \
     (defined(SIMULATOR_DISPLAY_UC8179) || defined(SIMULATOR_DISPLAY_UC8279))
-#error "This device uses SSD1677; do not select an Xteink controller override"
+#error "This device uses SSD1677 or its own EPD driver; do not select an Xteink controller override"
 #endif
 
 #undef FREEINK_DEVICE_X4
@@ -35,6 +37,7 @@
 #undef FREEINK_DEVICE_X4PRO
 #undef FREEINK_DEVICE_STICKY
 #undef FREEINK_DEVICE_PAPERMONO
+#undef FREEINK_DEVICE_LILYGO
 
 #if defined(SIMULATOR_DEVICE_PAPERMONO)
 #define FREEINK_DEVICE_X4 0
@@ -42,6 +45,7 @@
 #define FREEINK_DEVICE_X4PRO 0
 #define FREEINK_DEVICE_STICKY 0
 #define FREEINK_DEVICE_PAPERMONO 1
+#define FREEINK_DEVICE_LILYGO 0
 #define FREEINK_CAP_TOUCH 1
 #define FREEINK_CAP_FRONTLIGHT 1
 #elif defined(SIMULATOR_DEVICE_STICKY)
@@ -50,6 +54,7 @@
 #define FREEINK_DEVICE_X4PRO 0
 #define FREEINK_DEVICE_STICKY 1
 #define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_DEVICE_LILYGO 0
 #define FREEINK_CAP_TOUCH 1
 #define FREEINK_CAP_FRONTLIGHT 0
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
@@ -58,6 +63,16 @@
 #define FREEINK_DEVICE_X4PRO 1
 #define FREEINK_DEVICE_STICKY 0
 #define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_DEVICE_LILYGO 0
+#define FREEINK_CAP_TOUCH 1
+#define FREEINK_CAP_FRONTLIGHT 1
+#elif defined(SIMULATOR_DEVICE_LILYGO_T5S3)
+#define FREEINK_DEVICE_X4 0
+#define FREEINK_DEVICE_X3 0
+#define FREEINK_DEVICE_X4PRO 0
+#define FREEINK_DEVICE_STICKY 0
+#define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_DEVICE_LILYGO 1
 #define FREEINK_CAP_TOUCH 1
 #define FREEINK_CAP_FRONTLIGHT 1
 #elif defined(SIMULATOR_DEVICE_X3)
@@ -66,6 +81,7 @@
 #define FREEINK_DEVICE_X4PRO 0
 #define FREEINK_DEVICE_STICKY 0
 #define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_DEVICE_LILYGO 0
 #define FREEINK_CAP_TOUCH 0
 #define FREEINK_CAP_FRONTLIGHT 0
 #else
@@ -74,6 +90,7 @@
 #define FREEINK_DEVICE_X4PRO 0
 #define FREEINK_DEVICE_STICKY 0
 #define FREEINK_DEVICE_PAPERMONO 0
+#define FREEINK_DEVICE_LILYGO 0
 #define FREEINK_CAP_TOUCH 0
 #define FREEINK_CAP_FRONTLIGHT 0
 #endif
@@ -89,6 +106,7 @@ enum class Board {
   XteinkX4Pro,
   Sticky,
   PaperMono,
+  LilyGoT5S3,
 };
 
 enum class DisplayController {
@@ -96,6 +114,7 @@ enum class DisplayController {
   UC8253,
   UC8279,
   UC8179,
+  LgfxEpd,
 };
 
 struct ViewableInsets {
@@ -150,6 +169,12 @@ inline constexpr BoardProfile STICKY = {
 inline constexpr BoardProfile PAPER_MONO = {
     Board::PaperMono, "m5stack_paper_mono", DisplayController::SSD1677, 0,
     {0, 7}, {9, 7, 3, 7}};
+// LilyGo T5 S3 Pro: only BOOT (GPIO0) is a direct GPIO, the user button sits
+// behind the PCA9535 expander (board-support, not modeled here) -- see
+// freeink-sdk BoardConfig.h, LILYGO_T5S3. No fixed up/down pair, so leave
+// input unassigned like the other touch-first profiles.
+inline constexpr BoardProfile LILYGO_T5S3 = {
+    Board::LilyGoT5S3, "lilygo_t5s3", DisplayController::LgfxEpd, 0, {-1, -1}};
 
 #if defined(SIMULATOR_DEVICE_PAPERMONO)
 inline BoardProfile ACTIVE = PAPER_MONO;
@@ -157,6 +182,8 @@ inline BoardProfile ACTIVE = PAPER_MONO;
 inline BoardProfile ACTIVE = STICKY;
 #elif defined(SIMULATOR_DEVICE_X4_PRO)
 inline BoardProfile ACTIVE = XTEINK_X4_PRO;
+#elif defined(SIMULATOR_DEVICE_LILYGO_T5S3)
+inline BoardProfile ACTIVE = LILYGO_T5S3;
 #elif defined(SIMULATOR_DEVICE_X3)
 #if defined(SIMULATOR_DISPLAY_UC8279)
 inline BoardProfile ACTIVE = XTEINK_X3_UC8279;
@@ -187,6 +214,9 @@ inline bool selectDevice(Board board) {
   case Board::PaperMono:
     ACTIVE = PAPER_MONO;
     return true;
+  case Board::LilyGoT5S3:
+    ACTIVE = LILYGO_T5S3;
+    return true;
   }
   return false;
 }
@@ -194,9 +224,12 @@ inline bool selectDevice(Board board) {
 inline bool isX4Pro() { return ACTIVE.board == Board::XteinkX4Pro; }
 inline bool isSticky() { return ACTIVE.board == Board::Sticky; }
 inline bool isPaperMono() { return ACTIVE.board == Board::PaperMono; }
-inline bool hasTouch() { return isX4Pro() || isSticky() || isPaperMono(); }
+inline bool isLilyGoT5S3() { return ACTIVE.board == Board::LilyGoT5S3; }
+inline bool hasTouch() {
+  return isX4Pro() || isSticky() || isPaperMono() || isLilyGoT5S3();
+}
 inline bool hasHomeKey() { return isX4Pro(); }
-inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono(); }
+inline bool hasPwmFrontlight() { return isX4Pro() || isPaperMono() || isLilyGoT5S3(); }
 
 inline void holdPowerRails() {}
 
