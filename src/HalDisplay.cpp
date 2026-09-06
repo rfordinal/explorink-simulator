@@ -559,6 +559,23 @@ void HalDisplay::begin() {
               scaleMode == WindowScaleMode::Real ? "1" : "0");
 
   sdl_renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+  // A headless run (SDL_VIDEODRIVER=dummy, which is how a scripted screenshot
+  // run avoids stealing focus) has no accelerated render driver, so the call
+  // above returns null. Every draw and every screenshot then silently did
+  // nothing: presentIfNeeded() returns early on a null renderer, so the process
+  // ran its whole input script and exited 0 with no BMP written and no error.
+  // The software renderer serves that case; keeping the accelerated attempt
+  // first leaves a windowed run untouched.
+  if (!sdl_renderer) {
+    std::cerr << "[SIM] accelerated renderer unavailable (" << SDL_GetError()
+              << "), falling back to software" << std::endl;
+    sdl_renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+  }
+  if (!sdl_renderer) {
+    std::cerr << "[SIM] SDL_CreateRenderer failed: " << SDL_GetError()
+              << std::endl;
+    return;
+  }
 
   // All drawing stays in panel coordinates; SDL maps them onto the window.
   SDL_RenderSetLogicalSize(sdl_renderer, logicalW, logicalH);
