@@ -495,6 +495,7 @@ bool HalGPIO::hasEdgeSideButtons() const {
 }
 
 void HalGPIO::beginFrame() {
+  updateSeq++;
   // Clear the press/release edge latches once per frame. See update() for why
   // this is deliberately separate from the SDL poll.
   for (int i = 0; i < NUM_BUTTONS; i++) {

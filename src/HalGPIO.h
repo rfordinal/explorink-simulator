@@ -37,6 +37,14 @@ class HalGPIO {
   InputManager inputMgr;
 #endif
 
+  // Which input frame the last frame boundary produced. The firmware derives
+  // per-frame work from it (MappedInputManager pumps the touch hint boxes once
+  // per frame). It ticks in beginFrame(), not in update(): the firmware calls
+  // update() several times inside one frame here, and a per-update() tick would
+  // re-pump latched touch edges that beginFrame() has not cleared yet.
+  // Wraps harmlessly: only equality against the last seen value is read.
+  uint32_t updateSeq = 0;
+
 public:
   enum class DeviceType : uint8_t { X4, X3 };
 
@@ -61,6 +69,8 @@ public:
 
   // Button input methods
   void update();
+  // Increments once per frame. See updateSeq.
+  uint32_t updateSequence() const { return updateSeq; }
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;

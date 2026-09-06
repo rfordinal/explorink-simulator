@@ -129,6 +129,13 @@ struct BoardProfile {
   const char *name;
   DisplayController displayController;
   uint8_t displayControllerVariant;
+  // Landscape framebuffer, the same pair and the same orientation freeink-sdk's
+  // BoardProfile carries. The firmware's theme geometry reads it directly
+  // (HintGeometry::portraitWidth is displayHeight), so it has to agree with
+  // EInkDisplay's compile-time DISPLAY_WIDTH / DISPLAY_HEIGHT or hint boxes are
+  // laid out for a panel the simulator never draws.
+  uint16_t displayWidth;
+  uint16_t displayHeight;
   struct {
     int8_t up;
     int8_t down;
@@ -155,26 +162,29 @@ inline constexpr uint8_t X4_DISPLAY_CONTROLLER_VARIANT = 0;
 inline constexpr BoardProfile XTEINK_X4 = {Board::XteinkX4, "xteink_x4",
                                            X4_DISPLAY_CONTROLLER,
                                            X4_DISPLAY_CONTROLLER_VARIANT,
+                                           800, 480,
                                            {4, 5}};
 inline constexpr BoardProfile XTEINK_X3 = {Board::XteinkX3, "xteink_x3",
-                                           DisplayController::UC8253, 0, {4, 5}};
+                                           DisplayController::UC8253, 0,
+                                           792, 528, {4, 5}};
 inline constexpr BoardProfile XTEINK_X3_UC8279 = {
     Board::XteinkX3Uc8279, "xteink_x3_uc8279", DisplayController::UC8279, 0,
-    {4, 5}};
+    792, 528, {4, 5}};
 inline constexpr BoardProfile XTEINK_X4_PRO = {
     Board::XteinkX4Pro, "xteink_x4_pro", X4_DISPLAY_CONTROLLER,
-    X4_DISPLAY_CONTROLLER_VARIANT, {0, 7}};
+    X4_DISPLAY_CONTROLLER_VARIANT, 800, 480, {0, 7}};
 inline constexpr BoardProfile STICKY = {
-    Board::Sticky, "sticky", DisplayController::SSD1677, 0, {5, 6}};
+    Board::Sticky, "sticky", DisplayController::SSD1677, 0, 800, 480, {5, 6}};
 inline constexpr BoardProfile PAPER_MONO = {
     Board::PaperMono, "m5stack_paper_mono", DisplayController::SSD1677, 0,
-    {0, 7}, {9, 7, 3, 7}};
+    800, 480, {0, 7}, {9, 7, 3, 7}};
 // LilyGo T5 S3 Pro: only BOOT (GPIO0) is a direct GPIO, the user button sits
 // behind the PCA9535 expander (board-support, not modeled here) -- see
 // freeink-sdk BoardConfig.h, LILYGO_T5S3. No fixed up/down pair, so leave
 // input unassigned like the other touch-first profiles.
 inline constexpr BoardProfile LILYGO_T5S3 = {
-    Board::LilyGoT5S3, "lilygo_t5s3", DisplayController::LgfxEpd, 0, {-1, -1}};
+    Board::LilyGoT5S3, "lilygo_t5s3", DisplayController::LgfxEpd, 0, 960, 540,
+    {-1, -1}};
 
 #if defined(SIMULATOR_DEVICE_PAPERMONO)
 inline BoardProfile ACTIVE = PAPER_MONO;
