@@ -4,11 +4,18 @@
 #include <cstdint>
 #include <memory>
 
+#include "Print.h"
 #include "WString.h"
 
 class Stream;
 
-class NetworkClient {
+// Derives from Print for the same reason the real one does: Arduino's
+// NetworkClient is a Stream, and Stream is a Print, so firmware may hand a
+// client to anything taking a `Print&`. WebDAVHandler::handleGet() does exactly
+// that (readFileToStream(path, client)), and without this base the native build
+// fails there with "cannot convert 'NetworkClient' to 'Print&'" while every
+// device build is fine -- a divergence in the shim, not in the firmware.
+class NetworkClient : public Print {
 public:
   NetworkClient() {}
   explicit NetworkClient(int fd);
