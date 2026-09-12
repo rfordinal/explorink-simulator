@@ -89,6 +89,24 @@ Off by default. A simulator run with no BLE client behaves exactly as it did
 before the shim existed. The `CROSSPOINT_SIM_*` prefix matches the existing
 simulator env vars (`CROSSPOINT_SIM_INPUT_SCRIPT`, `CROSSPOINT_SIM_SCREENSHOTS`).
 
+**Launch the binary directly, not through `pio run -e simulator -t
+run_simulator`.** Measured 2026-09-12 (parent `docs/simulator-ble-client.md`,
+"T-112"): that custom target built and ran the simulator, BLE subsystem init
+happened normally (Map entry always calls `BlePositionServer::begin()`, sim or
+not), but the TCP listener never came up -- `--sim` tools reported "nothing
+listening" the whole run. The direct binary with identical env vars opened the
+port immediately. Root cause open: `SimBleLink::start(port)` logs nothing on
+success or failure (`SimBleLink.cpp:329-375`), so there is no signal telling
+apart "the port never reached this process" from "it arrived and the bind
+failed silently" -- could be `pio run`/SCons not forwarding the shell's env to
+the target action, or something else entirely. Known-working recipe:
+
+```
+SDL_VIDEODRIVER=dummy CROSSPOINT_SIM_BLE_PORT=8765 \
+  CROSSPOINT_SIM_INPUT_SCRIPT='1000:ENTER;60000:QUIT' \
+  ./.pio/build/simulator/program
+```
+
 ## Wire protocol `[contract]`
 
 One TCP listener on loopback. The simulator is the server. Newline-delimited
